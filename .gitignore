@@ -29,6 +29,9 @@ build/
 media_cache/
 *.log
 
+# Celery Beat runtime state (machine-local, not source)
+celerybeat-schedule*
+
 # IDE / OS
 .vscode/
 .idea/
