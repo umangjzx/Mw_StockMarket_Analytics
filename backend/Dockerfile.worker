@@ -1,0 +1,53 @@
+# ── Worker Dockerfile (includes heavier deps: ffmpeg, Whisper) ───────────────
+FROM python:3.11-slim AS base
+
+WORKDIR /app
+
+# System deps: ffmpeg for audio extraction, libpq for postgres
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev \
+    ffmpeg \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Deps stage ────────────────────────────────────────────────────────────────
+FROM base AS deps
+
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+        fastapi \
+        pydantic \
+        pydantic-settings \
+        "sqlalchemy[asyncio]" \
+        alembic \
+        asyncpg \
+        psycopg2-binary \
+        "celery[redis]" \
+        redis \
+        pgvector \
+        httpx \
+        google-api-python-client \
+        google-auth \
+        openai \
+        groq \
+        isodate \
+        yt-dlp \
+        youtube-transcript-api \
+        yfinance \
+        lxml \
+        faster-whisper \
+        ffmpeg-python \
+        "sentry-sdk[fastapi]" \
+        python-json-logger \
+        tenacity
+
+# ── Final stage ────────────────────────────────────────────────────────────────
+FROM base AS final
+
+COPY --from=deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=deps /usr/local/bin /usr/local/bin
+
+COPY . .
+
+CMD ["celery", "-A", "app.core.celery_app", "worker", "--loglevel=info"]

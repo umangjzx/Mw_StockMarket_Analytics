@@ -1,0 +1,197 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: mw_postgres
+    environment:
+      POSTGRES_USER: mw_user
+      POSTGRES_PASSWORD: mw_pass
+      POSTGRES_DB: mw_stockmarket
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mw_user -d mw_stockmarket"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: mw_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mw_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: mw_api
+    env_file:
+      - ../backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://mw_user:mw_pass@postgres:5432/mw_stockmarket
+      DATABASE_URL_SYNC: postgresql://mw_user:mw_pass@postgres:5432/mw_stockmarket
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      OLLAMA_BASE_URL: https://single-darkness-estrogen.ngrok-free.dev
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - media_cache:/tmp/mw_media_cache
+      - ../backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  worker-discovery:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.worker
+    container_name: mw_worker_discovery
+    env_file:
+      - ../backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://mw_user:mw_pass@postgres:5432/mw_stockmarket
+      DATABASE_URL_SYNC: postgresql://mw_user:mw_pass@postgres:5432/mw_stockmarket
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      OLLAMA_BASE_URL: https://single-darkness-estrogen.ngrok-free.dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - media_cache:/tmp/mw_media_cache
+      - ../backend:/app
+    command: celery -A app.core.celery_app worker -Q discovery,maintenance,market_data --concurrency=8 --loglevel=info
+
+  worker-transcription:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.worker
+    container_name: mw_worker_transcription
+    env_file:
+      - ../backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://mw_user:mw_pass@postgres:5432/mw_stockmarket
+      DATABASE_URL_SYNC: postgresql://mw_user:mw_pass@postgres:5432/mw_stockmarket
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      OLLAMA_BASE_URL: https://single-darkness-estrogen.ngrok-free.dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - media_cache:/tmp/mw_media_cache
+      - ../backend:/app
+    command: celery -A app.core.celery_app worker -Q transcription --concurrency=2 --pool=solo --loglevel=info
+
+  worker-analysis:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.worker
+    container_name: mw_worker_analysis
+    env_file:
+      - ../backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://mw_user:mw_pass@postgres:5432/mw_stockmarket
+      DATABASE_URL_SYNC: postgresql://mw_user:mw_pass@postgres:5432/mw_stockmarket
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      OLLAMA_BASE_URL: https://single-darkness-estrogen.ngrok-free.dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../backend:/app
+    command: celery -A app.core.celery_app worker -Q analysis,embedding --concurrency=1 --pool=solo --loglevel=info
+
+  worker-reports:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.worker
+    container_name: mw_worker_reports
+    env_file:
+      - ../backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://mw_user:mw_pass@postgres:5432/mw_stockmarket
+      DATABASE_URL_SYNC: postgresql://mw_user:mw_pass@postgres:5432/mw_stockmarket
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      OLLAMA_BASE_URL: https://single-darkness-estrogen.ngrok-free.dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../backend:/app
+    command: celery -A app.core.celery_app worker -Q reports --concurrency=2 --loglevel=info
+
+  beat:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.worker
+    container_name: mw_beat
+    env_file:
+      - ../backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://mw_user:mw_pass@postgres:5432/mw_stockmarket
+      DATABASE_URL_SYNC: postgresql://mw_user:mw_pass@postgres:5432/mw_stockmarket
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../backend:/app
+    command: celery -A app.core.celery_app beat --loglevel=info
+
+volumes:
+  postgres_data:
+  redis_data:
+  media_cache:
+  ollama_data:
