@@ -93,6 +93,12 @@ class OllamaProvider(LLMProvider, EmbeddingProvider):
             },
         )
 
+        try:
+            from app.services.quota_tracker import QuotaTracker
+            QuotaTracker().record_usage(1, service="ollama")
+        except Exception as exc:
+            logger.warning("Ollama quota tracking failed (non-fatal)", extra={"error": str(exc)})
+
         return LLMResponse(
             content=content,
             model_used=self._llm_model,
@@ -133,4 +139,11 @@ class OllamaProvider(LLMProvider, EmbeddingProvider):
             "Ollama embeddings generated",
             extra={"model": self._embed_model, "count": len(results)},
         )
+
+        try:
+            from app.services.quota_tracker import QuotaTracker
+            QuotaTracker().record_usage(len(results), service="ollama")
+        except Exception as exc:
+            logger.warning("Ollama quota tracking failed (non-fatal)", extra={"error": str(exc)})
+
         return results

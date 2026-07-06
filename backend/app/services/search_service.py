@@ -11,6 +11,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.models.channel import Channel
 from app.models.company import Company, Ticker, VideoCompany
 from app.models.topic import Topic, VideoTopic
 from app.models.video import Video
@@ -35,6 +36,7 @@ class SearchService:
         ticker: str | None = None,
         company: str | None = None,
         channel_id: int | None = None,
+        creator: str | None = None,
         topic: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
@@ -65,6 +67,16 @@ class SearchService:
 
         if channel_id:
             filters.append(Video.channel_id == channel_id)
+
+        if creator:
+            # Search by the human-readable channel name — channel_id above is
+            # for callers that already know the numeric id.
+            creator_subq = (
+                select(Channel.id)
+                .where(Channel.display_name.ilike(f"%{creator}%"))
+                .scalar_subquery()
+            )
+            filters.append(Video.channel_id.in_(creator_subq))
 
         if date_from:
             filters.append(Video.published_at >= date_from)

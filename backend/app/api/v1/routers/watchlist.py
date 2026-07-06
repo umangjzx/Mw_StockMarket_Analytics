@@ -1,4 +1,14 @@
-"""Watchlist and bookmarks endpoints."""
+"""
+Watchlist and bookmarks endpoints.
+
+This is a personal, single-user tool — no JWT/login flow. Every watchlist
+and bookmark belongs to a single seeded user (see migration 0007). If this
+ever needs real multi-user auth, reintroduce `Depends(get_current_user)`
+from app.core.security and replace DEFAULT_USER_ID with the authenticated
+user's id everywhere below.
+"""
+
+from pydantic import BaseModel, Field
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
@@ -6,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError, AlreadyExistsError
-from app.core.security import TokenData, get_current_user
 from app.db.session import get_db
 from app.models.company import Ticker
 from app.models.user import Bookmark, Watchlist, WatchlistItem
@@ -14,16 +23,23 @@ from app.models.video import Video
 
 router = APIRouter(tags=["watchlist"])
 
+DEFAULT_USER_ID = 1
+
+
+class CreateWatchlistRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+
+
+class AddTickerRequest(BaseModel):
+    ticker: str = Field(..., min_length=1)
+
 
 # ── Watchlists ────────────────────────────────────────────────────────────────
 
 @router.get("/watchlists")
-async def list_watchlists(
-    db: AsyncSession = Depends(get_db),
-    user: TokenData = Depends(get_current_user),
-) -> dict:
+async def list_watchlists(db: AsyncSession = Depends(get_db)) -> dict:
     result = await db.execute(
-        select(Watchlist).where(Watchlist.user_id == user.user_id)
+        select(Watchlist).where(Watchlist.user_id == DEFAULT_USER_ID)
     )
     lists = result.scalars().all()
     return {"watchlists": [{"id": w.id, "name": w.name, "created_at": w.created_at} for w in lists]}
@@ -31,16 +47,15 @@ async def list_watchlists(
 
 @router.post("/watchlists", status_code=201)
 async def create_watchlist(
-    name: str = Query(..., min_length=1, max_length=100),
+    body: CreateWatchlistRequest,
     db: AsyncSession = Depends(get_db),
-    user: TokenData = Depends(get_current_user),
 ) -> dict:
     existing = await db.execute(
-        select(Watchlist).where(Watchlist.user_id == user.user_id, Watchlist.name == name)
+        select(Watchlist).where(Watchlist.user_id == DEFAULT_USER_ID, Watchlist.name == body.name)
     )
     if existing.scalar_one_or_none():
-        raise AlreadyExistsError(f"Watchlist '{name}' already exists")
-    wl = Watchlist(user_id=user.user_id, name=name)
+        raise AlreadyExistsError(f"Watchlist '{body.name}' already exists")
+    wl = Watchlist(user_id=DEFAULT_USER_ID, name=body.name)
     db.add(wl)
     await db.flush()
     await db.refresh(wl)
@@ -51,12 +66,11 @@ async def create_watchlist(
 async def get_watchlist(
     watchlist_id: int,
     db: AsyncSession = Depends(get_db),
-    user: TokenData = Depends(get_current_user),
 ) -> dict:
     result = await db.execute(
         select(Watchlist)
         .options(selectinload(Watchlist.items).selectinload(WatchlistItem.ticker))
-        .where(Watchlist.id == watchlist_id, Watchlist.user_id == user.user_id)
+        .where(Watchlist.id == watchlist_id, Watchlist.user_id == DEFAULT_USER_ID)
     )
     wl = result.scalar_one_or_none()
     if not wl:
@@ -72,20 +86,19 @@ async def get_watchlist(
 @router.post("/watchlists/{watchlist_id}/items", status_code=201)
 async def add_ticker_to_watchlist(
     watchlist_id: int,
-    ticker_symbol: str = Query(...),
+    body: AddTickerRequest,
     db: AsyncSession = Depends(get_db),
-    user: TokenData = Depends(get_current_user),
 ) -> dict:
     wl = await db.get(Watchlist, watchlist_id)
-    if not wl or wl.user_id != user.user_id:
+    if not wl or wl.user_id != DEFAULT_USER_ID:
         raise NotFoundError(f"Watchlist {watchlist_id} not found")
 
     ticker_r = await db.execute(
-        select(Ticker).where(Ticker.symbol == ticker_symbol.upper()).limit(1)
+        select(Ticker).where(Ticker.symbol == body.ticker.upper()).limit(1)
     )
     ticker = ticker_r.scalar_one_or_none()
     if not ticker:
-        raise NotFoundError(f"Ticker {ticker_symbol} not found — add videos mentioning it first")
+        raise NotFoundError(f"Ticker {body.ticker} not found — add videos mentioning it first")
 
     existing = await db.execute(
         select(WatchlistItem).where(
@@ -94,7 +107,7 @@ async def add_ticker_to_watchlist(
         )
     )
     if existing.scalar_one_or_none():
-        raise AlreadyExistsError(f"{ticker_symbol} already in watchlist")
+        raise AlreadyExistsError(f"{body.ticker} already in watchlist")
 
     db.add(WatchlistItem(watchlist_id=watchlist_id, ticker_id=ticker.id))
     await db.flush()
@@ -106,10 +119,9 @@ async def remove_ticker_from_watchlist(
     watchlist_id: int,
     ticker_id: int,
     db: AsyncSession = Depends(get_db),
-    user: TokenData = Depends(get_current_user),
 ) -> None:
     wl = await db.get(Watchlist, watchlist_id)
-    if not wl or wl.user_id != user.user_id:
+    if not wl or wl.user_id != DEFAULT_USER_ID:
         raise NotFoundError(f"Watchlist {watchlist_id} not found")
 
     item_r = await db.execute(
@@ -130,7 +142,6 @@ async def watchlist_feed(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    user: TokenData = Depends(get_current_user),
 ) -> dict:
     """Videos/insights relevant to tickers on this watchlist."""
     from sqlalchemy import func
@@ -139,7 +150,7 @@ async def watchlist_feed(
     wl_r = await db.execute(
         select(Watchlist)
         .options(selectinload(Watchlist.items))
-        .where(Watchlist.id == watchlist_id, Watchlist.user_id == user.user_id)
+        .where(Watchlist.id == watchlist_id, Watchlist.user_id == DEFAULT_USER_ID)
     )
     wl = wl_r.scalar_one_or_none()
     if not wl:
@@ -178,7 +189,17 @@ async def watchlist_feed(
 
     return {
         "watchlist_id": watchlist_id,
-        "items": [{"id": v.id, "title": v.title, "published_at": v.published_at, "pipeline_status": v.pipeline_status} for v in videos],
+        "items": [
+            {
+                "id": v.id,
+                "title": v.title,
+                "published_at": v.published_at,
+                "pipeline_status": v.pipeline_status,
+                "thumbnail_url": v.thumbnail_url,
+                "duration_seconds": v.duration_seconds,
+            }
+            for v in videos
+        ],
         "page": page,
         "page_size": page_size,
         "total": total,
@@ -192,18 +213,17 @@ async def list_bookmarks(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    user: TokenData = Depends(get_current_user),
 ) -> dict:
     from sqlalchemy import func
     count_r = await db.execute(
-        select(func.count(Bookmark.id)).where(Bookmark.user_id == user.user_id)
+        select(func.count(Bookmark.id)).where(Bookmark.user_id == DEFAULT_USER_ID)
     )
     total = count_r.scalar() or 0
 
     result = await db.execute(
         select(Bookmark)
         .options(selectinload(Bookmark.video))
-        .where(Bookmark.user_id == user.user_id)
+        .where(Bookmark.user_id == DEFAULT_USER_ID)
         .order_by(Bookmark.created_at.desc())
         .limit(page_size)
         .offset((page - 1) * page_size)
@@ -224,17 +244,16 @@ async def add_bookmark(
     video_id: int = Query(...),
     note: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    user: TokenData = Depends(get_current_user),
 ) -> dict:
     video = await db.get(Video, video_id)
     if not video:
         raise NotFoundError(f"Video {video_id} not found")
     existing = await db.execute(
-        select(Bookmark).where(Bookmark.user_id == user.user_id, Bookmark.video_id == video_id)
+        select(Bookmark).where(Bookmark.user_id == DEFAULT_USER_ID, Bookmark.video_id == video_id)
     )
     if existing.scalar_one_or_none():
         raise AlreadyExistsError("Video already bookmarked")
-    b = Bookmark(user_id=user.user_id, video_id=video_id, note=note)
+    b = Bookmark(user_id=DEFAULT_USER_ID, video_id=video_id, note=note)
     db.add(b)
     await db.flush()
     await db.refresh(b)
@@ -245,10 +264,9 @@ async def add_bookmark(
 async def remove_bookmark(
     video_id: int,
     db: AsyncSession = Depends(get_db),
-    user: TokenData = Depends(get_current_user),
 ) -> None:
     result = await db.execute(
-        select(Bookmark).where(Bookmark.user_id == user.user_id, Bookmark.video_id == video_id)
+        select(Bookmark).where(Bookmark.user_id == DEFAULT_USER_ID, Bookmark.video_id == video_id)
     )
     b = result.scalar_one_or_none()
     if not b:

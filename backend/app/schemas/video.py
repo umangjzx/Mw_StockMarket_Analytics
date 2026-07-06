@@ -31,6 +31,7 @@ class VideoResponse(BaseModel):
     pipeline_status: str
     pipeline_failure_reason: str | None
     pipeline_retry_count: int
+    overall_sentiment: str | None = None
     created_at: datetime
     updated_at: datetime
 

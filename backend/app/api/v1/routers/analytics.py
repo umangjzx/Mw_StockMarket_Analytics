@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
@@ -96,13 +96,13 @@ async def ticker_sentiment_series(
             func.date(Video.published_at).label("day"),
             func.count(VideoTickerSentiment.id).label("video_count"),
             func.avg(
-                func.case(
+                case(
                     (VideoTickerSentiment.sentiment == "bullish", 1.0),
                     else_=0.0
                 )
             ).label("bullish_rate"),
             func.avg(
-                func.case(
+                case(
                     (VideoTickerSentiment.sentiment == "bearish", 1.0),
                     else_=0.0
                 )

@@ -122,3 +122,11 @@ class Video(Base):
         return (
             f"<Video id={self.id} ext={self.external_video_id!r} status={self.pipeline_status!r}>"
         )
+
+    @property
+    def overall_sentiment(self) -> str | None:
+        """Flattened sentiment label for list views — requires the `sentiment`
+        relationship to be eager-loaded (selectinload) by the caller, same as
+        any other relationship access in this codebase (see SYSTEM-CONTEXT.md
+        rule on lazy loading under NullPool)."""
+        return self.sentiment.overall_sentiment if self.sentiment else None

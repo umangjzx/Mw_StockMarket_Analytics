@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     WHISPER_MODEL_SIZE: Literal["tiny", "base", "small", "medium", "large-v2"] = "base"
     WHISPER_DEVICE: Literal["cpu", "cuda"] = "cpu"
     GROQ_API_KEY: str = Field("", description="Groq API key for ultra-fast FREE Whisper")
+    GROQ_DAILY_REQUEST_LIMIT: int = 7_000  # documented free-tier ceiling
+
+    # ── Ollama usage (self-hosted — no real ceiling, this is a dashboard reference point) ──
+    OLLAMA_DAILY_REQUEST_SOFT_LIMIT: int = 10_000
 
     # ── JWT Auth ──────────────────────────────────────────────────────────
     JWT_ALGORITHM: str = "HS256"

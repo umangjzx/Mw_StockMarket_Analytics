@@ -117,6 +117,12 @@ class GroqWhisperProvider(TranscriptionProvider):
                 language="en",
             )
 
+        try:
+            from app.services.quota_tracker import QuotaTracker
+            QuotaTracker().record_usage(1, service="groq")
+        except Exception as exc:
+            logger.warning("Groq quota tracking failed (non-fatal)", extra={"error": str(exc)})
+
         # Groq verbose_json response — segments may be dicts or objects
         raw_segments = getattr(response, "segments", None) or []
 

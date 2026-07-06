@@ -52,10 +52,12 @@ async def pipeline_failures(
                 "id": v.id,
                 "external_video_id": v.external_video_id,
                 "title": v.title,
+                "video_url": v.video_url,
                 "channel_id": v.channel_id,
                 "failure_reason": v.pipeline_failure_reason,
                 "retry_count": v.pipeline_retry_count,
                 "next_retry_at": v.pipeline_next_retry_at,
+                "updated_at": v.updated_at,
             }
             for v in items
         ],
@@ -85,18 +87,38 @@ async def retry_video(
 
 
 @router.get("/quota")
-def get_quota() -> dict:
-    """Current YouTube API + OpenAI quota/spend tracking."""
-    tracker = QuotaTracker()
-    current = tracker.get_current_usage()
+async def get_quota(db: AsyncSession = Depends(get_db)) -> dict:
+    """Current usage across every external service this project calls, plus a
+    7-day processing throughput figure — all Redis-counter-based except the
+    video count, which is a real DB query."""
     from app.core.config import settings
+    from datetime import UTC, timedelta
+
+    tracker = QuotaTracker()
+    youtube_used = tracker.get_current_usage("youtube")
+    groq_used = tracker.get_current_usage("groq")
+    ollama_used = tracker.get_current_usage("ollama")
+
+    since = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=7)
+    processed_r = await db.execute(
+        select(func.count(Video.id)).where(
+            Video.pipeline_status == "INDEXED", Video.updated_at >= since
+        )
+    )
+    videos_processed_7d = processed_r.scalar() or 0
+
     return {
         "youtube": {
-            "used": current,
+            "used": youtube_used,
             "limit": settings.YOUTUBE_DAILY_QUOTA_LIMIT,
-            "remaining": settings.YOUTUBE_DAILY_QUOTA_LIMIT - current,
-            "pct_used": round(current / settings.YOUTUBE_DAILY_QUOTA_LIMIT * 100, 1),
+            "remaining": settings.YOUTUBE_DAILY_QUOTA_LIMIT - youtube_used,
+            "pct_used": round(youtube_used / settings.YOUTUBE_DAILY_QUOTA_LIMIT * 100, 1),
         },
+        "groq_requests_today": groq_used,
+        "groq_daily_limit": settings.GROQ_DAILY_REQUEST_LIMIT,
+        "ollama_requests_today": ollama_used,
+        "ollama_daily_limit": settings.OLLAMA_DAILY_REQUEST_SOFT_LIMIT,
+        "videos_processed_7d": videos_processed_7d,
     }
 
 

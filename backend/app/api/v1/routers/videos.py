@@ -21,6 +21,8 @@ async def list_videos(
     channel_id: int | None = None,
     pipeline_status: str | None = None,
     content_type: str | None = None,
+    sentiment: str | None = Query(None, pattern="^(bullish|bearish|neutral)$"),
+    external_video_id: str | None = Query(None, description="Filter by YouTube video ID, e.g. for polling a just-submitted video"),
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     sort: str = Query("-published_at", description="Sort field, prefix - for descending"),
@@ -34,6 +36,8 @@ async def list_videos(
         channel_id=channel_id,
         pipeline_status=pipeline_status,
         content_type=content_type,
+        sentiment=sentiment,
+        external_video_id=external_video_id,
         date_from=date_from,
         date_to=date_to,
         sort=sort,
@@ -111,7 +115,7 @@ async def process_video_url(
         "external_video_id": external_video_id,
         "task_id": result.id,
         "message": "Video processing started. Check status with task_id or poll /api/v1/videos",
-        "poll_url": f"/api/v1/videos?external_id={external_video_id}"
+        "poll_url": f"/api/v1/videos?external_video_id={external_video_id}"
     }
 
 

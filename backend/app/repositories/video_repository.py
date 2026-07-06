@@ -16,6 +16,15 @@ class VideoRepository(BaseRepository[Video]):
     def __init__(self, session: AsyncSession):
         super().__init__(Video, session)
 
+    async def get_by_id(self, id: int) -> Video | None:
+        """Override the base getter to eager-load `sentiment` — the
+        `Video.overall_sentiment` property reads it, and an unloaded
+        relationship raises MissingGreenlet under the async ORM."""
+        result = await self.session.execute(
+            select(Video).options(selectinload(Video.sentiment)).where(Video.id == id)
+        )
+        return result.scalar_one_or_none()
+
     async def get_by_external_id(self, channel_id: int, external_video_id: str) -> Video | None:
         result = await self.session.execute(
             select(Video).where(
@@ -59,11 +68,15 @@ class VideoRepository(BaseRepository[Video]):
         channel_id: int | None = None,
         pipeline_status: str | None = None,
         content_type: str | None = None,
+        sentiment: str | None = None,
+        external_video_id: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
         sort: str = "-published_at",
     ) -> tuple[list[Video], int]:
-        q = select(Video)
+        from app.models.sentiment import Sentiment
+
+        q = select(Video).options(selectinload(Video.sentiment))
         count_q = select(func.count()).select_from(Video)
 
         filters = []
@@ -73,10 +86,18 @@ class VideoRepository(BaseRepository[Video]):
             filters.append(Video.pipeline_status == pipeline_status)
         if content_type:
             filters.append(Video.content_type == content_type)
+        if external_video_id:
+            filters.append(Video.external_video_id == external_video_id)
         if date_from:
             filters.append(Video.published_at >= date_from)
         if date_to:
             filters.append(Video.published_at <= date_to)
+
+        if sentiment:
+            # Sentiment is a separate 1:1 table, not a Video column — needs a join.
+            q = q.join(Sentiment, Sentiment.video_id == Video.id)
+            count_q = count_q.join(Sentiment, Sentiment.video_id == Video.id)
+            filters.append(Sentiment.overall_sentiment == sentiment)
 
         if filters:
             q = q.where(and_(*filters))
