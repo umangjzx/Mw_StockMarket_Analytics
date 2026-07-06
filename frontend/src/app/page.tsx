@@ -5,14 +5,20 @@ import Link from "next/link";
 import {
   TrendingUp, Play, Zap, Clock, ArrowUpRight,
   BarChart3, PlayCircle, Loader2, Database, Activity, Cpu,
-  FileText, ChevronDown, ChevronUp,
+  FileText, ChevronDown, ChevronUp, History, X,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip,
 } from "recharts";
-import { useTrendingStocks, useSectorHeatmap, useVideos, usePipelineStatus, useLatestReport } from "@/lib/hooks";
+import {
+  useTrendingStocks, useSectorHeatmap, useVideos, usePipelineStatus, useLatestReport,
+  useQuote, useAnalyst,
+} from "@/lib/hooks";
 import { videoApi } from "@/lib/api";
-import { fmtDateTime, changeClass } from "@/lib/utils";
+import {
+  fmtDateTime, changeClass, fmt, fmtPct, consensusLabel, consensusClass,
+  getRecentTickers, removeRecentTicker, type RecentTicker,
+} from "@/lib/utils";
 import { SentimentBadge, PipelineBadge } from "@/components/ui/Badge";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -253,6 +259,83 @@ function ProcessUrlForm() {
         </p>
       )}
     </form>
+  );
+}
+
+// ── Recently Viewed Stocks ────────────────────────────────────────────────────
+function RecentlyViewedCard({ ticker, onRemove }: { ticker: string; onRemove: (symbol: string) => void }) {
+  const { data: quoteData, isLoading } = useQuote(ticker);
+  const { data: analystData } = useAnalyst(ticker);
+  const q: any = (quoteData as any)?.quote ?? {};
+  const a: any = (analystData as any)?.analyst ?? {};
+
+  return (
+    <Link
+      href={`/company/${ticker}`}
+      className="glass-card-hover relative flex-shrink-0 w-[150px] p-3 rounded-xl border border-white/5 group"
+    >
+      <button
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(ticker); }}
+        className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-400"
+        title="Remove from history"
+      >
+        <X size={11} />
+      </button>
+      <p className="font-mono font-bold text-sm group-hover:text-blue-400 transition-colors" style={{ color: "var(--text-primary)" }}>
+        {ticker}
+      </p>
+      {isLoading ? (
+        <Skeleton className="h-3 w-16 mt-1.5" />
+      ) : (
+        <>
+          <p className={`text-[11px] font-mono mt-1 ${changeClass(q.change_pct)}`}>
+            {q.price != null ? `${q.currency === "INR" ? "₹" : "$"}${fmt(q.price, 2)}` : "—"}
+          </p>
+          {q.change_pct != null && (
+            <p className={`text-[10px] font-mono ${changeClass(q.change_pct)}`}>{fmtPct(q.change_pct)}</p>
+          )}
+        </>
+      )}
+      <span className={`inline-block mt-2 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-white/5 ${consensusClass(a.recommendation_key)}`}>
+        {consensusLabel(a.recommendation_key)}
+      </span>
+    </Link>
+  );
+}
+
+function RecentlyViewedStocks() {
+  const [tickers, setTickers] = useState<RecentTicker[]>([]);
+
+  useEffect(() => {
+    setTickers(getRecentTickers());
+  }, []);
+
+  function remove(symbol: string) {
+    removeRecentTicker(symbol);
+    setTickers(getRecentTickers());
+  }
+
+  if (tickers.length === 0) return null;
+
+  return (
+    <div className="glass-card card-accent-teal p-5">
+      <div className="section-header mb-3">
+        <div className="section-title">
+          <div className="icon-container icon-teal">
+            <History size={14} />
+          </div>
+          Recently Viewed
+        </div>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-1">
+        {tickers.map((t) => (
+          <RecentlyViewedCard key={t.symbol} ticker={t.symbol} onRemove={remove} />
+        ))}
+      </div>
+      <p className="text-[10px] mt-3 pt-3 border-t border-white/5" style={{ color: "var(--text-dim)" }}>
+        Consensus = aggregated Wall Street analyst ratings via Yahoo Finance — informational only, not financial advice.
+      </p>
+    </div>
   );
 }
 
@@ -510,6 +593,9 @@ export default function DashboardPage() {
           <ProcessUrlForm />
         </div>
       </div>
+
+      {/* Recently Viewed */}
+      <RecentlyViewedStocks />
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">

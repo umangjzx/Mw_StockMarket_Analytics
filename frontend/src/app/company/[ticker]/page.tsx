@@ -21,7 +21,7 @@ import {
 import { chatApi, companyApi, watchlistApi } from "@/lib/api";
 import {
   fmt, fmtLarge, fmtPct, fmtCurrency, fmtDate, fmtDateTime,
-  changeClass, sentimentClass,
+  changeClass, sentimentClass, addRecentTicker,
 } from "@/lib/utils";
 import { SentimentBadge, Badge } from "@/components/ui/Badge";
 import { Skeleton, SkeletonCard, SkeletonTable } from "@/components/ui/Skeleton";
@@ -983,6 +983,10 @@ function VideoIntelligencePanel({ ticker }: { ticker: string }) {
 export default function CompanyPage({ params }: { params: Promise<{ ticker: string }> }) {
   const { ticker } = use(params);
   const upper = ticker.toUpperCase();
+
+  useEffect(() => {
+    addRecentTicker(upper);
+  }, [upper]);
 
   const TABS = [
     { id: "overview",     label: "Overview" },

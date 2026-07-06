@@ -140,6 +140,49 @@ backfills the snapshot for the next request. The AI executive summary is the onl
 that calls an LLM synchronously, and it reuses the video pipeline's own analysis/embedding
 tables rather than re-deriving anything.
 
+**Auth model.** This is a personal, single-user tool, not a multi-tenant service — there's
+no login flow. A default user is seeded by migration `0007` and every watchlist/bookmark
+belongs to it. The only gate in the whole system is `X-Admin-Key` on `/admin/*` and
+`/scheduler/*`, and the frontend only attaches that header to the specific calls that need
+it (not on every request, since `NEXT_PUBLIC_ADMIN_KEY` is visible to any client).
+
+### Deployment topology
+
+What actually runs where, with real container names and ports from
+[`infra/docker-compose.yml`](infra/docker-compose.yml). The frontend is a separate Next.js
+dev server (`npm run dev`, port 3000) — it isn't containerized, it just points at the
+API's port over `NEXT_PUBLIC_API_URL`.
+
+```mermaid
+flowchart LR
+    UI["Your browser<br/>localhost:3000<br/>Next.js dev server (run separately)"]
+
+    subgraph Compose["docker compose up -d — infra/docker-compose.yml"]
+        direction TB
+        API["mw_api : 8000<br/>uvicorn --reload, FastAPI"]
+        BEAT["mw_beat<br/>Celery Beat scheduler"]
+        WD["mw_worker_discovery<br/>-Q discovery,maintenance,market_data"]
+        WT["mw_worker_transcription<br/>-Q transcription --pool=solo"]
+        WA["mw_worker_analysis<br/>-Q analysis,embedding --pool=solo"]
+        WR["mw_worker_reports<br/>-Q reports"]
+        PG[("mw_postgres : 5432<br/>pgvector/pgvector:pg16")]
+        RD[("mw_redis : 6379<br/>redis:7-alpine — broker + cache")]
+        OL["mw_ollama : 11434<br/>local fallback LLM"]
+    end
+
+    NGROK["Optional: free Colab T4 GPU<br/>Ollama behind an ngrok tunnel<br/>(faster than the local CPU fallback)"]
+
+    UI -- "NEXT_PUBLIC_API_URL" --> API
+    API --> PG
+    API --> RD
+    BEAT --> RD
+    RD --> WD & WT & WA & WR
+    WD & WT & WA & WR --> PG
+    API -. "OLLAMA_BASE_URL" .-> OL
+    WA -. "OLLAMA_BASE_URL" .-> OL
+    OL -. "swap target" .-> NGROK
+```
+
 ### Company Intelligence module
 
 ```mermaid
@@ -164,7 +207,7 @@ backend via a thin typed client (`frontend/src/lib/api.ts`) and SWR for data fet
 
 | Route | What it does |
 |---|---|
-| `/` | Dashboard — trending stocks, sector heatmap, daily AI report, recent videos, process-a-video form with live pipeline-status polling |
+| `/` | Dashboard — trending stocks, sector heatmap, daily AI report, recent videos, process-a-video form with live pipeline-status polling, and a "Recently Viewed" strip of tickers you've searched, each with a live quote and analyst buy/hold/sell consensus |
 | `/company/[ticker]` | Full Company Intelligence page — quote, real OHLC candlestick + volume chart (`lightweight-charts`), profile, ratios, financials, earnings, technicals, news, analyst insights, AI executive summary, video intelligence (with semantic search), RAG chat |
 | `/search` | Structured (SQL filter) and semantic (pgvector) search over the video index |
 | `/analytics` | Trending tickers/sectors, sentiment timeseries, sector heatmap |
