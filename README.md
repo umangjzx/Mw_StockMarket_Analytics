@@ -54,23 +54,91 @@ For deep operational detail (known bugs and fixes, exact env vars, pipeline stat
 Ollama/Colab setup), see [`SYSTEM-CONTEXT.md`](SYSTEM-CONTEXT.md) at the repo root — that
 file is the authoritative day-to-day reference and is kept current across sessions.
 
-### System overview
+### End-to-end system architecture
 
+Two independent pipelines share one FastAPI + PostgreSQL backbone: an **always-on video
+pipeline** (Celery workers continuously discover, transcribe, and analyze new YouTube
+videos in the background) and an **on-demand Company Intelligence pipeline** (a ticker
+lookup triggers a cache-through fetch, not a queued job — it resolves in the request
+itself). The frontend is a single Next.js app that reads from both.
+
+```mermaid
+flowchart TB
+    FE["Next.js Frontend<br/>dashboard · company/ticker · search<br/>analytics · videos · watchlist · admin · chat"]
+
+    subgraph API["FastAPI — app/api/v1/routers"]
+        direction LR
+        R_VID["videos · search<br/>chat · analytics · reports"]
+        R_WL["watchlist · bookmarks<br/>(single default user, no auth)"]
+        R_CI["companies/* — Company Intelligence"]
+        R_ADMIN["admin · scheduler<br/>(requires X-Admin-Key)"]
+    end
+
+    subgraph Async["Async pipeline — Redis broker + Celery"]
+        direction LR
+        BEAT["Celery Beat<br/>poll channels · retry failures<br/>refresh watched quotes · daily report"]
+        BROKER[("Redis broker<br/>discovery · transcription<br/>analysis · embedding · reports · market_data")]
+        W_DISC["worker-discovery<br/>discovery, maintenance, market_data"]
+        W_TRANS["worker-transcription<br/>transcription (--pool=solo)"]
+        W_ANLZ["worker-analysis<br/>analysis, embedding (--pool=solo)"]
+        W_REP["worker-reports<br/>reports"]
+        BEAT --> BROKER
+        BROKER --> W_DISC & W_TRANS & W_ANLZ & W_REP
+    end
+
+    subgraph Ext["External Providers"]
+        direction LR
+        YT["YouTube<br/>Data API · captions · yt-dlp"]
+        GROQ["Groq<br/>Whisper transcription"]
+        OLLAMA["Ollama<br/>LLM completion + embeddings"]
+        MKT["yfinance → Twelve Data<br/>composite waterfall"]
+    end
+
+    subgraph Data["Data Layer"]
+        direction LR
+        PG[("PostgreSQL + pgvector<br/>videos · transcripts · embeddings<br/>companies · tickers · price_bars · reports")]
+        RCACHE[("Redis<br/>short-TTL quote/chart cache<br/>SETNX stampede locks")]
+    end
+
+    FE -- "REST /api/v1/*" --> API
+    R_VID -- read/write --> PG
+    R_WL -- "resolve + read/write" --> PG
+    R_ADMIN -- read/retry --> PG
+    R_VID -- "enqueue on new URL" --> BROKER
+    R_ADMIN -- "trigger/retry" --> BROKER
+
+    W_DISC -- "poll uploads" --> YT
+    W_DISC -- "persist DISCOVERED" --> PG
+    W_TRANS -- "captions, else audio" --> YT
+    W_TRANS -- "Whisper fallback" --> GROQ
+    W_TRANS -- "persist transcript" --> PG
+    W_ANLZ -- "8 parallel extractors<br/>+ chunk embeddings" --> OLLAMA
+    W_ANLZ -- "persist analysis + vectors" --> PG
+    W_REP -- "aggregate + narrative synthesis" --> OLLAMA
+    W_REP -- "persist daily report" --> PG
+
+    R_CI -- "resolve ticker" --> PG
+    R_CI -- "cache-through read" --> RCACHE
+    RCACHE -. "miss → snapshot" .-> PG
+    PG -. "cold ticker → live fetch" .-> MKT
+    MKT -. "seed/refresh" .-> PG
+    R_CI -- "AI executive summary,<br/>news sentiment, video intel" --> OLLAMA
 ```
-YouTube channels ──▶ Discovery/Polling ──▶ Transcription (captions → Groq Whisper)
-                                                    │
-                                                    ▼
-                          8 parallel LLM extractors (Ollama mistral)
-                     summary · thesis · entities · topics · sentiment
-                          quotes · key numbers · actionable insights
-                                                    │
-                                                    ▼
-                    Chunk + embed (Ollama nomic-embed-text) ──▶ pgvector
-                                                    │
-                                                    ▼
-                 FastAPI: structured search · semantic search · RAG chat
-                          · analytics · daily reports · Company Intelligence
-```
+
+**Video pipeline** (background, Celery): Discovery polls channel upload feeds every N
+minutes → Transcription tries free YouTube captions first, falls back to Groq Whisper →
+8 LLM extractors run in parallel per video (summary, thesis, entities, topics, sentiment,
+quotes, key numbers, insights) → transcript is chunked and embedded into pgvector →
+`INDEXED`, now searchable and chat-able. Every stage persists its own state
+(`videos.pipeline_status`) so a crash or rate limit loses at most one step — see the
+[pipeline state machine](#pipeline-state-machine) below.
+
+**Company Intelligence pipeline** (on-demand, synchronous): a ticker/company/keyword
+query resolves through Redis (seconds-fresh) → PostgreSQL snapshot (durable, beat-
+refreshed for watchlisted tickers) → live provider fetch as a last resort, which also
+backfills the snapshot for the next request. The AI executive summary is the only part
+that calls an LLM synchronously, and it reuses the video pipeline's own analysis/embedding
+tables rather than re-deriving anything.
 
 ### Company Intelligence module
 
