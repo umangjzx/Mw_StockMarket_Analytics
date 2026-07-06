@@ -14,13 +14,20 @@ Runs entirely on free-tier infrastructure — **no OpenAI key required**: Groq (
 Whisper transcription) + Ollama (free local/Colab-GPU LLM + embeddings) + yfinance (free
 market data).
 
+Built as a **single-user personal tool** — there's no login screen or multi-tenant
+auth. A default user is seeded at first migration and the whole app operates as them;
+only the admin/scheduler routes are gated, behind a static `X-Admin-Key` header rather
+than a session.
+
 ## Current status
 
-**Backend is functional end-to-end.** The full video pipeline (discovery → transcription
-→ 8 parallel LLM extractors → embedding → indexing) runs, is searchable, and is chat-able.
+**Full stack is functional end-to-end.** The video pipeline (discovery → transcription →
+8 parallel LLM extractors → embedding → indexing) runs, is searchable, and is chat-able.
 The Company Intelligence module's first three phases are built and verified live against
-real tickers on both US (NASDAQ) and Indian (NSE/BSE) exchanges. No frontend yet —
-everything below is backend/API only.
+real tickers on both US (NASDAQ) and Indian (NSE/BSE) exchanges. A Next.js frontend
+covers all of it — dashboard, company research pages with a real candlestick chart,
+structured + semantic search, video intelligence, admin/pipeline monitoring, and a RAG
+chat UI.
 
 | Area | Status |
 |---|---|
@@ -29,8 +36,8 @@ everything below is backend/API only.
 | Company Intelligence — Phase 2 (ratios, financial statements, earnings, technical analysis) | ✅ Working |
 | Company Intelligence — Phase 3 (news + AI sentiment scoring, analyst insights, AI executive summary) | ✅ Working |
 | Company Intelligence — Phase 4 (SEC filings, social sentiment, competitor comparison) | ⏳ Scoped, not built |
-| Frontend | ⏳ Not started |
-| Multi-user auth enforcement, watchlist endpoints beyond stub | ⏳ Partial |
+| Frontend — Next.js app covering the full backend surface | ✅ Working |
+| Multi-user auth | ➖ Not applicable — single-user personal tool by design |
 
 ## Architecture
 
@@ -81,6 +88,25 @@ graph LR
 
 See [docs/07-company-intelligence.md](docs/07-company-intelligence.md) for the full
 component diagram, request-lifecycle sequence diagram, and entity-relationship diagram.
+
+### Frontend
+
+Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS 4, talking to the FastAPI
+backend via a thin typed client (`frontend/src/lib/api.ts`) and SWR for data fetching.
+
+| Route | What it does |
+|---|---|
+| `/` | Dashboard — trending stocks, sector heatmap, daily AI report, recent videos, process-a-video form with live pipeline-status polling |
+| `/company/[ticker]` | Full Company Intelligence page — quote, real OHLC candlestick + volume chart (`lightweight-charts`), profile, ratios, financials, earnings, technicals, news, analyst insights, AI executive summary, video intelligence (with semantic search), RAG chat |
+| `/search` | Structured (SQL filter) and semantic (pgvector) search over the video index |
+| `/analytics` | Trending tickers/sectors, sentiment timeseries, sector heatmap |
+| `/videos` | Video list with pipeline-status/sentiment filters |
+| `/watchlist` | Personal watchlists (no auth — single default user) |
+| `/admin` | Pipeline health donut, failure retry table, scheduler jobs, Groq/Ollama quota usage, task logs |
+| `/chat` | Standalone RAG chat, not scoped to a single ticker |
+
+The `X-Admin-Key` header is only attached to the specific calls that need it
+(`adminApi.*`, `videoApi.reprocess`, scheduler triggers) — not sent on every request.
 
 ## Quick Start (Development)
 
@@ -142,8 +168,8 @@ This starts:
 docker compose exec api alembic upgrade head
 ```
 
-Current head: `0006` (video pipeline schema `0001`-`0003`, Company Intelligence Phases
-1-3 add `0004`-`0006`).
+Current head: `0007` (video pipeline schema `0001`-`0003`, Company Intelligence Phases
+1-3 add `0004`-`0006`, `0007` seeds the single default user this personal tool runs as).
 
 ### 4. Verify
 
@@ -154,7 +180,27 @@ curl http://localhost:8000/health
 
 Access interactive API docs at: http://localhost:8000/api/docs
 
-### 5. Try it
+### 5. Run the frontend
+
+```bash
+cd ../frontend
+npm install
+```
+
+Create `frontend/.env.local`:
+
+```ini
+NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+NEXT_PUBLIC_ADMIN_KEY=changeme-admin-key   # must match backend ADMIN_API_KEY
+```
+
+```bash
+npm run dev
+```
+
+Open http://localhost:3000.
+
+### 6. Try it
 
 ```bash
 # Process a single YouTube video (no YouTube API key needed)
@@ -164,6 +210,9 @@ curl -X POST "http://localhost:8000/api/v1/videos/process-url?url=https://youtu.
 curl "http://localhost:8000/api/v1/companies/AAPL"
 curl "http://localhost:8000/api/v1/companies/AAPL/executive-summary"
 ```
+
+Or just paste the video URL into the dashboard's "Process YouTube Video" box — the UI
+polls pipeline status for you and shows progress live.
 
 ## Development Workflow
 
@@ -226,7 +275,7 @@ backend/
 ├── app/
 │   ├── main.py              # FastAPI app factory
 │   ├── core/                # Config, logging, security, Celery app
-│   ├── db/                  # SQLAlchemy base, session, migrations/ (0001-0006)
+│   ├── db/                  # SQLAlchemy base, session, migrations/ (0001-0007)
 │   ├── models/               # ORM models — video pipeline + market_data.py,
 │   │                         # financials.py, news_analyst.py (Company Intelligence)
 │   ├── schemas/              # Pydantic request/response schemas
@@ -250,6 +299,18 @@ backend/
 ├── Dockerfile              # API image
 └── Dockerfile.worker       # Worker image (heavier deps: ffmpeg, Whisper, yfinance)
 
+frontend/
+├── src/
+│   ├── app/                  # Next.js App Router pages — dashboard, company/[ticker],
+│   │                         #   search, analytics, videos, watchlist, admin, chat, channels
+│   ├── components/
+│   │   ├── charts/            # CandlestickChart (lightweight-charts)
+│   │   ├── layout/             # Header, Sidebar
+│   │   └── ui/                 # Badge, Skeleton, Tabs, ErrorState, MetricCard
+│   └── lib/                  # api.ts (typed fetch client), hooks.ts (SWR hooks), utils.ts
+├── package.json
+└── tsconfig.json
+
 infra/
 └── docker-compose.yml      # Full stack orchestration
 
@@ -265,20 +326,23 @@ docs/
 
 ## API Endpoints
 
-Base URL: `http://localhost:8000` · Interactive docs: `/api/docs` · Admin routes require
-header `X-Admin-Key`.
+Base URL: `http://localhost:8000` · Interactive docs: `/api/docs` · Admin/scheduler
+routes require header `X-Admin-Key`; everything else is open — this is a single-user
+personal tool, not a multi-tenant service.
 
 ### Video pipeline
 | Method | Path | Notes |
 |---|---|---|
 | POST | `/api/v1/videos/process-url?url=` | Main entry point — no API key needed, uses yt-dlp |
-| GET | `/api/v1/videos` | List with filters |
+| GET | `/api/v1/videos` | Filters: `channel_id`, `pipeline_status`, `content_type`, `sentiment` (`bullish\|bearish\|neutral`), `external_video_id` (poll a just-submitted video), `date_from`/`date_to`, `sort` |
 | GET | `/api/v1/videos/{id}` | Pipeline status |
-| POST | `/api/v1/videos/{id}/reprocess?from_stage=` | Admin retry |
+| POST | `/api/v1/videos/{id}/reprocess?from_stage=` | Admin retry — requires `X-Admin-Key` |
 | GET | `/api/v1/videos/{id}/{summary\|sentiment\|companies\|key-numbers\|insights\|quotes\|transcript}` | Per-video AI results |
-| GET | `/api/v1/search` · POST `/api/v1/search/semantic` | Structured / pgvector search |
+| GET | `/api/v1/search` | Structured filter search — `q`, `ticker`, `company`, `channel_id`, `creator` (channel name), `topic`, `date_from`/`date_to` |
+| POST | `/api/v1/search/semantic` | pgvector semantic search |
 | POST | `/api/v1/chat/sessions` · `/messages` | RAG chat |
 | GET | `/api/v1/analytics/{trending-stocks\|trending-sectors\|sector-heatmap\|sentiment\|creator}` | Aggregations |
+| GET/POST/DELETE | `/api/v1/watchlists`, `/watchlists/{id}/items`, `/watchlists/{id}/feed`, `/bookmarks` | Single-user watchlists/bookmarks — no auth |
 
 ### Company Intelligence
 | Method | Path | Phase |
@@ -294,8 +358,10 @@ header `X-Admin-Key`.
 Full endpoint-by-endpoint reference with parameters: [docs/07-company-intelligence.md §7](docs/07-company-intelligence.md#7-api-reference).
 
 ### Admin
-`/api/v1/admin/{pipeline/status\|pipeline/failures\|pipeline/retry\|quota\|task-logs\|users}`,
-`/api/v1/scheduler/jobs` — all require `X-Admin-Key`.
+`/api/v1/admin/{pipeline/status\|pipeline/failures\|pipeline/retry\|quota\|task-logs}`,
+`/api/v1/scheduler/jobs` — all require `X-Admin-Key`. `/admin/quota` reports real Groq
+transcription and Ollama LLM/embedding usage against configurable daily limits, plus
+videos processed in the last 7 days.
 
 ## Pipeline state machine
 
@@ -312,8 +378,9 @@ DISCOVERED → TRANSCRIPT_PENDING → TRANSCRIPT_READY → ANALYSIS_PENDING
 - ✅ **Company Intelligence Phase 1** — ticker/company resolution, live market data, charts, profile, AI video intelligence integration
 - ✅ **Company Intelligence Phase 2** — financial statements, ratios, earnings, in-house technical analysis
 - ✅ **Company Intelligence Phase 3** — news aggregation with AI sentiment/impact scoring, analyst insights, AI executive summary
+- ✅ **Frontend** — Next.js app covering dashboard, company research (candlestick charts,
+  semantic search), structured/semantic search, analytics, admin/pipeline monitoring, RAG chat
 - ⏳ **Company Intelligence Phase 4** — SEC filings (US-only), social sentiment (Reddit + best-effort StockTwits), competitor comparison
-- ⏳ **Frontend** — Next.js, not started
 - ⏳ **Additional video sources** — podcasts, Twitter/X (source-adapter pattern already anticipated in the architecture)
 - ⏳ **Hardening** — broader test coverage, observability dashboards, production-grade docker-compose
 
