@@ -15,11 +15,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.exceptions import NotFoundError, AlreadyExistsError
 from app.db.session import get_db
 from app.models.company import Ticker
 from app.models.user import Bookmark, Watchlist, WatchlistItem
 from app.models.video import Video
+from app.providers.market_data.composite_provider import build_market_data_provider
+from app.services.company_intelligence_service import CompanyIntelligenceService
 
 router = APIRouter(tags=["watchlist"])
 
@@ -32,6 +35,15 @@ class CreateWatchlistRequest(BaseModel):
 
 class AddTickerRequest(BaseModel):
     ticker: str = Field(..., min_length=1)
+
+
+def _get_llm_provider():
+    """Same pattern as search.py / company_intelligence.py."""
+    if settings.LLM_PROVIDER == "ollama":
+        from app.providers.llm.ollama_provider import OllamaProvider
+        return OllamaProvider()
+    from app.providers.llm.openai_provider import OpenAIProvider
+    return OpenAIProvider()
 
 
 # ── Watchlists ────────────────────────────────────────────────────────────────
@@ -98,7 +110,15 @@ async def add_ticker_to_watchlist(
     )
     ticker = ticker_r.scalar_one_or_none()
     if not ticker:
-        raise NotFoundError(f"Ticker {body.ticker} not found — add videos mentioning it first")
+        # Not seen before — resolve it live the same way the Company
+        # Intelligence page does, so tracking a brand-new ticker doesn't
+        # require having viewed its page first (or ever mentioning it in a
+        # video, despite what the old error message here used to say).
+        llm = _get_llm_provider()
+        service = CompanyIntelligenceService(
+            session=db, market_provider=build_market_data_provider(), llm=llm, embedder=llm,
+        )
+        ticker = await service.resolve_ticker(body.ticker)
 
     existing = await db.execute(
         select(WatchlistItem).where(

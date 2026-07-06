@@ -1,12 +1,12 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import {
   TrendingUp, TrendingDown, Globe, Users, Building,
   Calendar, ExternalLink, RefreshCw, ChevronUp, ChevronDown,
   Minus, AlertTriangle, CheckCircle, BarChart2, Activity,
   Newspaper, UserCheck, Brain, Video, MessageSquare, Target,
-  ArrowUpRight, ArrowDownRight,
+  ArrowUpRight, ArrowDownRight, Eye, Bookmark, Loader2, X,
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -16,9 +16,9 @@ import { CandlestickChart } from "@/components/charts/CandlestickChart";
 import {
   useQuote, useChart, useProfile, useRatios, useFinancials,
   useEarnings, useTechnicals, useNews, useAnalyst, useExecutiveSummary,
-  useIntelligence, useCompanyVideos,
+  useIntelligence, useCompanyVideos, useWatchlists,
 } from "@/lib/hooks";
-import { chatApi, companyApi } from "@/lib/api";
+import { chatApi, companyApi, watchlistApi } from "@/lib/api";
 import {
   fmt, fmtLarge, fmtPct, fmtCurrency, fmtDate, fmtDateTime,
   changeClass, sentimentClass,
@@ -28,6 +28,7 @@ import { Skeleton, SkeletonCard, SkeletonTable } from "@/components/ui/Skeleton"
 import { ErrorState, EmptyState } from "@/components/ui/ErrorState";
 import { MetricCard, StatRow } from "@/components/ui/MetricCard";
 import { Tabs } from "@/components/ui/Tabs";
+import { useSWRConfig } from "swr";
 
 // ── Quote Hero ─────────────────────────────────────────────────────────────────
 function QuoteHero({ ticker }: { ticker: string }) {
@@ -111,6 +112,108 @@ function QuoteHero({ ticker }: { ticker: string }) {
               }}
             />
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Track This Stock? ────────────────────────────────────────────────────────────
+function TrackTickerPrompt({ ticker }: { ticker: string }) {
+  const { data } = useWatchlists();
+  const { mutate } = useSWRConfig();
+  const watchlists: any[] = (data as any)?.watchlists ?? [];
+  const [dismissed, setDismissed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [added, setAdded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
+
+  useEffect(() => {
+    setDismissed(sessionStorage.getItem(`track-dismissed-${ticker}`) === "1");
+    setAdded(false);
+    setError(null);
+    setShowPicker(false);
+  }, [ticker]);
+
+  function dismiss() {
+    setDismissed(true);
+    sessionStorage.setItem(`track-dismissed-${ticker}`, "1");
+  }
+
+  async function addToList(watchlistId: number) {
+    setBusy(true);
+    setError(null);
+    try {
+      await watchlistApi.addItem(watchlistId, ticker);
+      setAdded(true);
+      setTimeout(dismiss, 1800);
+    } catch (err: any) {
+      setError(err?.message ?? "Couldn't add it — still resolving this ticker, try again in a moment");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function quickTrack() {
+    if (watchlists.length === 0) {
+      setBusy(true);
+      setError(null);
+      try {
+        const created: any = await watchlistApi.create({ name: "My Watchlist" });
+        mutate("watchlists");
+        await addToList(created.id);
+      } catch (err: any) {
+        setError(err?.message ?? "Couldn't create a watchlist");
+        setBusy(false);
+      }
+      return;
+    }
+    if (watchlists.length === 1) {
+      addToList(watchlists[0].id);
+      return;
+    }
+    setShowPicker(true);
+  }
+
+  if (dismissed) return null;
+
+  return (
+    <div className="glass-card card-accent-purple p-4 flex flex-wrap items-center gap-3">
+      <Eye size={16} className="text-purple-400 flex-shrink-0" />
+      <p className="text-sm text-slate-300 flex-1 min-w-[220px]">
+        {added
+          ? `Added ${ticker} to your watchlist — you'll see it continuously from now on.`
+          : `Viewing ${ticker}. Track it continuously in a watchlist, or just browsing this once?`}
+      </p>
+      {!added && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={quickTrack} disabled={busy} className="btn-primary text-xs px-4 disabled:opacity-50">
+            {busy ? <Loader2 size={12} className="animate-spin" /> : <Bookmark size={12} />}
+            Track continuously
+          </button>
+          <button onClick={dismiss} className="btn-ghost text-xs px-3">Just viewing</button>
+        </div>
+      )}
+      {added && (
+        <button onClick={dismiss} className="btn-ghost p-1.5 rounded-lg">
+          <X size={13} />
+        </button>
+      )}
+      {error && <p className="text-xs text-red-400 w-full">{error}</p>}
+      {showPicker && (
+        <div className="w-full flex flex-wrap gap-2 pt-2 border-t border-white/5">
+          <span className="text-[11px] text-slate-500 self-center">Add to:</span>
+          {watchlists.map((wl: any) => (
+            <button
+              key={wl.id}
+              onClick={() => addToList(wl.id)}
+              disabled={busy}
+              className="btn-ghost text-xs px-3 disabled:opacity-50"
+            >
+              {wl.name}
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -883,6 +986,9 @@ export default function CompanyPage({ params }: { params: Promise<{ ticker: stri
           <Badge label="Company Intelligence" variant="blue" size="md" />
         </div>
       </div>
+
+      {/* Track this stock? */}
+      <TrackTickerPrompt ticker={upper} />
 
       {/* Quote Hero */}
       <QuoteHero ticker={upper} />

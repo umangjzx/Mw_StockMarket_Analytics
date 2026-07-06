@@ -78,6 +78,19 @@ export function Header() {
     router.push(`/company/${symbol}`);
   }
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (results.length > 0) {
+      pick(results[0].symbol);
+    } else if (query.trim()) {
+      // No resolved candidates yet (still debouncing, or provider search came up
+      // empty) — navigate straight there anyway. The company page resolves the
+      // ticker itself server-side, so this still works for a brand-new symbol.
+      pick(query.trim().toUpperCase());
+    }
+  }
+
   const dateStr = now.toLocaleDateString("en-IN", { weekday: "short", month: "short", day: "numeric" });
   const timeStr = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 
@@ -114,6 +127,7 @@ export function Header() {
             type="text"
             value={query}
             onChange={(e) => handleInput(e.target.value)}
+            onKeyDown={handleKeyDown}
             onFocus={() => { setFocused(true); if (results.length > 0) setOpen(true); }}
             onBlur={() => setFocused(false)}
             placeholder="Search ticker, company…"
