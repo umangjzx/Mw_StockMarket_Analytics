@@ -6,7 +6,7 @@ import {
   Calendar, ExternalLink, RefreshCw, ChevronUp, ChevronDown,
   Minus, AlertTriangle, CheckCircle, BarChart2, Activity,
   Newspaper, UserCheck, Brain, Video, MessageSquare, Target,
-  ArrowUpRight, ArrowDownRight, Eye, Bookmark, Loader2, X,
+  ArrowUpRight, ArrowDownRight, Eye, Bookmark, Loader2, X, Clock,
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -229,6 +229,18 @@ function PriceChart({ ticker }: { ticker: string }) {
   // Must match backend CHART_RANGES exactly (app/providers/market_data/base.py)
   const RANGES = ["1D","1W","1M","3M","6M","1Y","5Y","MAX"];
 
+  // Intraday ranges reflect whatever the exchange's most recent regular
+  // session is — outside trading hours (weekends, holidays, before/after the
+  // exchange's open) that's a prior day, not "stale" data. A same-vs-different
+  // UTC calendar day is a coarse check, but the gap that actually matters
+  // here (a closed market) is measured in days, not hours, so it holds up.
+  const lastBar = bars.length ? bars[bars.length - 1] : null;
+  const lastSessionDate = lastBar ? new Date(lastBar.ts) : null;
+  const showsPastSession =
+    (range === "1D" || range === "1W") &&
+    lastSessionDate != null &&
+    lastSessionDate.toISOString().slice(0, 10) !== new Date().toISOString().slice(0, 10);
+
   return (
     <div className="glass-card p-5">
       <div className="flex items-center justify-between mb-4">
@@ -249,6 +261,13 @@ function PriceChart({ ticker }: { ticker: string }) {
           ))}
         </div>
       </div>
+
+      {showsPastSession && (
+        <div className="flex items-center gap-2 mb-3 text-xs px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400">
+          <Clock size={12} className="flex-shrink-0" />
+          Market closed — showing last session ({fmtDate(lastSessionDate!.toISOString())})
+        </div>
+      )}
 
       {isLoading ? (
         <Skeleton className="h-56 w-full" />
