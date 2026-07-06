@@ -15,27 +15,9 @@ import {
 } from "@/lib/hooks";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState, EmptyState } from "@/components/ui/ErrorState";
-
-const SENT_COLORS: Record<string, string> = {
-  bullish: "#4ade80",
-  bearish: "#fb7185",
-  neutral: "#fbbf24",
-  mixed:   "#818cf8",
-};
-
-function CustomTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="tooltip">
-      <p className="text-[11px] mb-1.5 font-semibold" style={{ color: "var(--text-muted)" }}>{label}</p>
-      {payload.map((p: any, i: number) => (
-        <p key={i} style={{ color: p.color ?? p.fill }} className="text-xs font-mono">
-          {p.name}: <span className="font-semibold">{typeof p.value === "number" ? p.value.toFixed(1) : p.value}</span>
-        </p>
-      ))}
-    </div>
-  );
-}
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { ChartTooltip } from "@/components/charts/ChartTooltip";
+import { SENTIMENT_COLORS, sentimentColorValue, sentimentStyle } from "@/lib/constants";
 
 // ── Trending Stocks Full Chart ─────────────────────────────────────────────
 function TrendingFull({ window }: { window: string }) {
@@ -64,7 +46,7 @@ function TrendingFull({ window }: { window: string }) {
           width={62} tickLine={false} axisLine={false}
           onClick={(d) => router.push(`/company/${d.value}`)}
         />
-        <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(59,130,246,0.05)" }} />
+        <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(59,130,246,0.05)" }} />
         <Bar dataKey="mentions" name="Mentions" radius={[0, 5, 5, 0]} maxBarSize={18} fill="url(#trendGradA)" fillOpacity={0.9} />
       </BarChart>
     </ResponsiveContainer>
@@ -89,17 +71,10 @@ function SectorHeatmapFull({ window }: { window: string }) {
   if (error) return <ErrorState compact message="Could not load sectors" />;
   if (!sectors.length) return <EmptyState title="No sector data" />;
 
-  const sentColor = (s: string) => {
-    const sl = (s ?? "").toLowerCase();
-    if (sl === "bullish") return { bg: "rgba(34,197,94,0.13)", border: "rgba(34,197,94,0.28)", text: "#4ade80" };
-    if (sl === "bearish") return { bg: "rgba(244,63,94,0.13)", border: "rgba(244,63,94,0.28)", text: "#fb7185" };
-    return { bg: "rgba(245,158,11,0.1)", border: "rgba(245,158,11,0.25)", text: "#fbbf24" };
-  };
-
   return (
     <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2.5 stagger-children">
       {sectors.map((s: any) => {
-        const { bg, border, text } = sentColor(s.sentiment);
+        const { bg, border, text } = sentimentStyle(s.sentiment);
         return (
           <div key={s.sector} className="heatmap-cell text-center p-3"
             style={{ background: bg, border: `1px solid ${border}` }}>
@@ -146,7 +121,7 @@ function SentimentDonut({ window }: { window: string }) {
               innerRadius={52} outerRadius={75}
               dataKey="value" strokeWidth={0} paddingAngle={2}>
               {pieData.map((entry, i) => (
-                <Cell key={i} fill={SENT_COLORS[entry.name] ?? "#64748b"} fillOpacity={0.9} />
+                <Cell key={i} fill={sentimentColorValue(entry.name)} fillOpacity={0.9} />
               ))}
             </Pie>
             <Tooltip
@@ -155,7 +130,7 @@ function SentimentDonut({ window }: { window: string }) {
                 const d = payload[0].payload;
                 return (
                   <div className="tooltip">
-                    <p className="font-semibold text-xs capitalize" style={{ color: SENT_COLORS[d.name] }}>{d.name}</p>
+                    <p className="font-semibold text-xs capitalize" style={{ color: sentimentColorValue(d.name) }}>{d.name}</p>
                     <p className="text-xs font-mono" style={{ color: "var(--text-secondary)" }}>{d.value} · {d.pct}%</p>
                   </div>
                 );
@@ -166,7 +141,7 @@ function SentimentDonut({ window }: { window: string }) {
         {/* Center label */}
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
           <p className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Dominant</p>
-          <p className="text-sm font-bold capitalize" style={{ color: SENT_COLORS[dominant] ?? "var(--text-primary)" }}>
+          <p className="text-sm font-bold capitalize" style={{ color: sentimentColorValue(dominant) }}>
             {dominant}
           </p>
         </div>
@@ -176,9 +151,9 @@ function SentimentDonut({ window }: { window: string }) {
       <div className="w-full space-y-2">
         {Object.entries(totals).filter(([, v]) => v > 0).map(([name, value]) => (
           <div key={name} className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: SENT_COLORS[name] }} />
+            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: sentimentColorValue(name) }} />
             <span className="text-xs capitalize flex-1" style={{ color: "var(--text-secondary)" }}>{name}</span>
-            <span className="text-xs font-mono font-semibold" style={{ color: SENT_COLORS[name] }}>{value}</span>
+            <span className="text-xs font-mono font-semibold" style={{ color: sentimentColorValue(name) }}>{value}</span>
             <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
               {((value / grand) * 100).toFixed(1)}%
             </span>
@@ -218,15 +193,15 @@ function SectorSentimentBars({ window }: { window: string }) {
           angle={-30} textAnchor="end" interval={0}
         />
         <YAxis hide />
-        <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+        <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
         <Legend
           wrapperStyle={{ fontSize: 10, color: "#8899b4", paddingTop: 8 }}
-          formatter={(value) => <span style={{ color: SENT_COLORS[value] ?? "#8899b4", textTransform: "capitalize" }}>{value}</span>}
+          formatter={(value) => <span style={{ color: sentimentColorValue(value), textTransform: "capitalize" }}>{value}</span>}
         />
-        <Bar dataKey="bullish" name="bullish" stackId="a" fill="#4ade80" fillOpacity={0.85} maxBarSize={32} />
-        <Bar dataKey="bearish" name="bearish" stackId="a" fill="#fb7185" fillOpacity={0.85} maxBarSize={32} />
-        <Bar dataKey="neutral" name="neutral" stackId="a" fill="#fbbf24" fillOpacity={0.85} maxBarSize={32} />
-        <Bar dataKey="mixed"   name="mixed"   stackId="a" fill="#818cf8" fillOpacity={0.85} maxBarSize={32} radius={[4, 4, 0, 0]} />
+        <Bar dataKey="bullish" name="bullish" stackId="a" fill={SENTIMENT_COLORS.bullish} fillOpacity={0.85} maxBarSize={32} />
+        <Bar dataKey="bearish" name="bearish" stackId="a" fill={SENTIMENT_COLORS.bearish} fillOpacity={0.85} maxBarSize={32} />
+        <Bar dataKey="neutral" name="neutral" stackId="a" fill={SENTIMENT_COLORS.neutral} fillOpacity={0.85} maxBarSize={32} />
+        <Bar dataKey="mixed"   name="mixed"   stackId="a" fill={SENTIMENT_COLORS.mixed}   fillOpacity={0.85} maxBarSize={32} radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -268,11 +243,11 @@ function SentimentTimeseries() {
             <CartesianGrid stroke="rgba(255,255,255,0.04)" />
             <XAxis dataKey="date" tick={{ fill: "#3d5070", fontSize: 10 }} tickLine={false} axisLine={false} />
             <YAxis tick={{ fill: "#3d5070", fontSize: 10 }} tickLine={false} axisLine={false} width={28} />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<ChartTooltip />} />
             <Legend wrapperStyle={{ fontSize: 11, color: "#8899b4" }} />
-            <Line type="monotone" dataKey="bullish" stroke="#4ade80" strokeWidth={2} dot={false} name="Bullish %" />
-            <Line type="monotone" dataKey="bearish" stroke="#fb7185" strokeWidth={2} dot={false} name="Bearish %" />
-            <Line type="monotone" dataKey="neutral" stroke="#fbbf24" strokeWidth={2} dot={false} name="Neutral %" />
+            <Line type="monotone" dataKey="bullish" stroke={SENTIMENT_COLORS.bullish} strokeWidth={2} dot={false} name="Bullish %" />
+            <Line type="monotone" dataKey="bearish" stroke={SENTIMENT_COLORS.bearish} strokeWidth={2} dot={false} name="Bearish %" />
+            <Line type="monotone" dataKey="neutral" stroke={SENTIMENT_COLORS.neutral} strokeWidth={2} dot={false} name="Neutral %" />
           </LineChart>
         </ResponsiveContainer>
       )}
@@ -297,7 +272,7 @@ function SectorBars({ window }: { window: string }) {
         </defs>
         <XAxis dataKey="sector" tick={{ fill: "#3d5070", fontSize: 9 }} tickLine={false} axisLine={false} />
         <YAxis hide />
-        <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(168,85,247,0.05)" }} />
+        <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(168,85,247,0.05)" }} />
         <Bar dataKey="mentions" name="Mentions" radius={[5, 5, 0, 0]} maxBarSize={36} fill="url(#sectorGradB)" fillOpacity={0.85} />
       </BarChart>
     </ResponsiveContainer>
@@ -331,84 +306,81 @@ export default function AnalyticsPage() {
 
         {/* Trending Stocks */}
         <div className="glass-card card-accent-blue p-5">
-          <div className="section-header">
-            <div className="section-title">
-              <div className="icon-container icon-blue"><TrendingUp size={14} /></div>
-              Trending Stocks
-            </div>
-            <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full"
-              style={{ background: "rgba(59,130,246,0.1)", color: "var(--accent-light)", border: "1px solid rgba(59,130,246,0.2)" }}>
-              {window}
-            </span>
-          </div>
+          <SectionHeader
+            icon={TrendingUp}
+            iconColor="blue"
+            title="Trending Stocks"
+            action={
+              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full"
+                style={{ background: "rgba(59,130,246,0.1)", color: "var(--accent-light)", border: "1px solid rgba(59,130,246,0.2)" }}>
+                {window}
+              </span>
+            }
+          />
           <TrendingFull window={window} />
           <p className="text-[10px] mt-2" style={{ color: "var(--text-dim)" }}>Click ticker label to open Company Intelligence</p>
         </div>
 
         {/* Sentiment Timeseries */}
         <div className="glass-card card-accent-green p-5">
-          <div className="section-header">
-            <div className="section-title">
-              <div className="icon-container icon-green"><Activity size={14} /></div>
-              Sentiment Over Time
-            </div>
-          </div>
+          <SectionHeader icon={Activity} iconColor="green" title="Sentiment Over Time" />
           <SentimentTimeseries />
         </div>
 
         {/* Sector Heatmap — full width */}
         <div className="glass-card card-accent-purple p-5 xl:col-span-2">
-          <div className="section-header">
-            <div className="section-title">
-              <div className="icon-container icon-purple"><BarChart2 size={14} /></div>
-              Sector Sentiment Heatmap
-            </div>
-            <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full"
-              style={{ background: "rgba(168,85,247,0.1)", color: "var(--purple-light)", border: "1px solid rgba(168,85,247,0.2)" }}>
-              {window}
-            </span>
-          </div>
+          <SectionHeader
+            icon={BarChart2}
+            iconColor="purple"
+            title="Sector Sentiment Heatmap"
+            action={
+              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full"
+                style={{ background: "rgba(168,85,247,0.1)", color: "var(--purple-light)", border: "1px solid rgba(168,85,247,0.2)" }}>
+                {window}
+              </span>
+            }
+          />
           <SectorHeatmapFull window={window} />
         </div>
 
-        {/* Sentiment Distribution Donut — NEW */}
+        {/* Sentiment Distribution Donut — same underlying data as the heatmap
+            above and the stacked bars below, deliberately shown as a 3rd chart
+            type (share-of-whole vs. per-sector breakdown vs. per-sector volume) —
+            not redundant, keep all three. */}
         <div className="glass-card card-accent-green p-5">
-          <div className="section-header">
-            <div className="section-title">
-              <div className="icon-container icon-green"><PieIcon size={14} /></div>
-              Sentiment Distribution
-            </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full"
-              style={{ background: "rgba(34,197,94,0.1)", color: "var(--green)", border: "1px solid rgba(34,197,94,0.2)" }}>
-              {window}
-            </span>
-          </div>
+          <SectionHeader
+            icon={PieIcon}
+            iconColor="green"
+            title="Sentiment Distribution"
+            action={
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full"
+                style={{ background: "rgba(34,197,94,0.1)", color: "var(--green)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                {window}
+              </span>
+            }
+          />
           <SentimentDonut window={window} />
         </div>
 
-        {/* Stacked Sector Sentiment — NEW, full width */}
+        {/* Stacked Sector Sentiment — full width */}
         <div className="glass-card card-accent-purple p-5 xl:col-span-2">
-          <div className="section-header">
-            <div className="section-title">
-              <div className="icon-container icon-purple"><BarChart2 size={14} /></div>
-              Sector Sentiment Breakdown
-            </div>
-          </div>
+          <SectionHeader icon={BarChart2} iconColor="purple" title="Sector Sentiment Breakdown" />
           <SectorSentimentBars window={window} />
         </div>
 
         {/* Sector Volume */}
         <div className="glass-card card-accent-amber p-5">
-          <div className="section-header">
-            <div className="section-title">
-              <div className="icon-container icon-amber"><Layers size={14} /></div>
-              Sector Mention Volume
-            </div>
-            <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full"
-              style={{ background: "rgba(245,158,11,0.1)", color: "var(--amber-light)", border: "1px solid rgba(245,158,11,0.2)" }}>
-              {window}
-            </span>
-          </div>
+          <SectionHeader
+            icon={Layers}
+            iconColor="amber"
+            title="Sector Mention Volume"
+            action={
+              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full"
+                style={{ background: "rgba(245,158,11,0.1)", color: "var(--amber-light)", border: "1px solid rgba(245,158,11,0.2)" }}>
+                {window}
+              </span>
+            }
+          />
           <SectorBars window={window} />
         </div>
 

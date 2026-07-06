@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, Send, Loader2, ExternalLink, Brain, Sparkles, MessageSquareQuote, Database } from "lucide-react";
+import { Plus, Send, Loader2, ExternalLink, Brain, Sparkles, MessageSquareQuote, Database, Menu } from "lucide-react";
 import { chatApi } from "@/lib/api";
 import { fmtDate } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/ErrorState";
@@ -23,6 +23,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [ticker, setTicker] = useState("");
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,6 +37,7 @@ export default function ChatPage() {
       setSessions((s) => [session, ...s]);
       setActiveSession(session);
       setMessages([]);
+      setShowMobileSidebar(false);
     } catch (e: any) {
       alert(`Failed to create session: ${e.message}`);
     }
@@ -64,9 +66,14 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-full" style={{ height: "calc(100vh - 57px)" }}>
+    <div className="flex h-full relative overflow-hidden" style={{ height: "calc(100vh - 57px)" }}>
+      {/* Mobile Overlay */}
+      {showMobileSidebar && (
+        <div className="md:hidden absolute inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={() => setShowMobileSidebar(false)} />
+      )}
+
       {/* Session Sidebar */}
-      <div className="w-64 flex-shrink-0 border-r border-white/5 flex flex-col" style={{ background: "var(--bg-surface)" }}>
+      <div className={`absolute inset-y-0 left-0 z-50 w-64 flex-shrink-0 border-r border-white/5 flex flex-col transform transition-transform duration-300 md:relative md:translate-x-0 ${showMobileSidebar ? "translate-x-0" : "-translate-x-full"}`} style={{ background: "var(--bg-surface)" }}>
         <div className="p-4 border-b border-white/5">
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Sessions</p>
           <div className="flex flex-col gap-2 mb-3">
@@ -91,7 +98,7 @@ export default function ChatPage() {
           {sessions.map((s) => (
             <button
               key={s.id}
-              onClick={() => { setActiveSession(s); setMessages([]); }}
+              onClick={() => { setActiveSession(s); setMessages([]); setShowMobileSidebar(false); }}
               className={`w-full text-left p-3 rounded-xl transition-all group border ${
                 activeSession?.id === s.id
                   ? "bg-blue-500/10 border-blue-500/30 shadow-inner"
@@ -112,7 +119,15 @@ export default function ChatPage() {
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0 bg-black/40">
+      <div className="flex-1 flex flex-col min-w-0 bg-black/40 relative">
+        {/* Mobile Header Toggle */}
+        <div className="md:hidden p-3 border-b border-white/5 flex items-center bg-black/60">
+          <button onClick={() => setShowMobileSidebar(true)} className="btn-ghost p-1.5 rounded-md text-slate-400 hover:text-white">
+            <Menu size={20} />
+          </button>
+          <span className="ml-3 font-bold text-sm tracking-tight text-white">AI Chat</span>
+        </div>
+
         {!activeSession ? (
           <div className="flex-1 flex items-center justify-center p-6 fade-in">
             <div className="text-center space-y-5 max-w-md">

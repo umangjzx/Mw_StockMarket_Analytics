@@ -53,6 +53,7 @@
   --purple-glow:    rgba(168, 85, 247, 0.2);
 
   --teal:           #14b8a6;
+  --teal-light:     #2dd4bf;
   --teal-dim:       rgba(20, 184, 166, 0.12);
   --teal-glow:      rgba(20, 184, 166, 0.2);
 
@@ -85,6 +86,72 @@
   --color-amber:      var(--amber);
   --font-sans:        'Inter', system-ui, sans-serif;
   --font-mono:        'JetBrains Mono', monospace;
+
+  /* Backgrounds — layered depth. Named without a "bg-" segment so the
+     generated utility (bg-elevated, bg-card-hover, ...) doesn't stutter. */
+  --color-card-hover: var(--bg-card-hover);
+  --color-elevated:   var(--bg-elevated);
+  --color-input:      var(--bg-input);
+  --color-overlay:    var(--bg-overlay);
+
+  /* Borders — semantic names instead of a literal "border-" segment,
+     for the same stutter reason (border-border-subtle etc). */
+  --color-hairline:     var(--border-subtle);
+  --color-focus:        var(--border-active);
+  --color-border-strong: var(--border-hover);
+
+  /* Text tones — "-fg" suffix avoids stuttering against Tailwind's own
+     text- prefix (text-text-secondary would otherwise result). */
+  --color-secondary-fg: var(--text-secondary);
+  --color-muted-fg:     var(--text-muted);
+  --color-dim-fg:       var(--text-dim);
+
+  /* Accent (blue) variants */
+  --color-accent-light:  var(--accent-light);
+  --color-accent-bright: var(--accent-bright);
+  --color-accent-dim:    var(--accent-dim);
+  --color-accent-glow:   var(--accent-glow);
+
+  /* Semantic color variants — light/dim/glow for each family already in :root */
+  --color-green-light: var(--green-light);
+  --color-green-dim:   var(--green-dim);
+  --color-green-glow:  var(--green-glow);
+
+  --color-red-light: var(--red-light);
+  --color-red-dim:   var(--red-dim);
+  --color-red-glow:  var(--red-glow);
+
+  --color-amber-light: var(--amber-light);
+  --color-amber-dim:   var(--amber-dim);
+  --color-amber-glow:  var(--amber-glow);
+
+  --color-purple:       var(--purple);
+  --color-purple-light: var(--purple-light);
+  --color-purple-dim:   var(--purple-dim);
+  --color-purple-glow:  var(--purple-glow);
+
+  --color-teal:       var(--teal);
+  --color-teal-light: var(--teal-light);
+  --color-teal-dim:   var(--teal-dim);
+  --color-teal-glow:  var(--teal-glow);
+
+  /* Radius scale — "token" segment keeps these distinct from Tailwind's own
+     differently-sized rounded-sm/rounded-lg/etc, so adopting rounded-token-*
+     is an explicit, greppable opt-in rather than a silent redefinition. */
+  --radius-token-xs:  var(--radius-xs);
+  --radius-token-sm:  var(--radius-sm);
+  --radius-token-md:  var(--radius);
+  --radius-token-lg:  var(--radius-lg);
+  --radius-token-xl:  var(--radius-xl);
+  --radius-token-2xl: var(--radius-2xl);
+
+  /* Shadows, same "token" namespacing rationale as radius above */
+  --shadow-token-sm:        var(--shadow-sm);
+  --shadow-token-card:      var(--shadow-card);
+  --shadow-token-raised:    var(--shadow-raised);
+  --shadow-token-glow-blue:  var(--shadow-glow-blue);
+  --shadow-token-glow-green: var(--shadow-glow-green);
+  --shadow-token-glow-red:   var(--shadow-glow-red);
 }
 
 /* ── Base Reset ────────────────────────────────────────────────────────────── */

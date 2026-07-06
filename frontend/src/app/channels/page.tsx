@@ -52,7 +52,7 @@ function CreatorCard({ channel }: { channel: any }) {
 
   return (
     <div
-      className="glass-card glass-card-hover p-5 flex flex-col gap-4"
+      className="glass-card glass-card-hover p-5 flex flex-col gap-4 group"
       style={{ position: 'relative', overflow: 'hidden' }}
     >
       {/* Top accent strip color based on sentiment */}
@@ -127,14 +127,8 @@ function CreatorCard({ channel }: { channel: any }) {
           <div className="flex flex-wrap gap-1">
             {stats.top_tickers.slice(0, 5).map((t: string) => (
               <Link key={t} href={`/company/${t}`}
-                className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-mono font-bold transition-colors"
-                style={{
-                  background: 'rgba(59,130,246,0.1)',
-                  color: 'var(--accent-light)',
-                  border: '1px solid rgba(59,130,246,0.2)',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(59,130,246,0.2)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(59,130,246,0.1)'; }}
+                className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-mono font-bold transition-colors bg-blue-500/10 border border-blue-500/20 group-hover:bg-blue-500/20"
+                style={{ color: 'var(--accent-light)' }}
               >
                 {t}
               </Link>

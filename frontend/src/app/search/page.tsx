@@ -110,7 +110,7 @@ export default function SearchPage() {
               value={ticker}
               onChange={(e) => setTicker(e.target.value)}
               placeholder="Ticker (e.g. AAPL)"
-              className="input-field text-xs font-mono uppercase"
+              className="input-field text-sm font-mono uppercase"
               id="search-filter-ticker"
             />
             <input
@@ -118,7 +118,7 @@ export default function SearchPage() {
               value={creator}
               onChange={(e) => setCreator(e.target.value)}
               placeholder="Channel Name"
-              className="input-field text-xs"
+              className="input-field text-sm"
               id="search-filter-creator"
             />
             <input
@@ -126,7 +126,7 @@ export default function SearchPage() {
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               placeholder="Topic"
-              className="input-field text-xs"
+              className="input-field text-sm"
               id="search-filter-topic"
             />
           </div>
@@ -162,7 +162,7 @@ export default function SearchPage() {
           </p>
           {mode === "structured"
             ? results.map((v: any) => (
-                <div key={v.id} className="glass-card glass-card-hover p-4 flex gap-4 group">
+                <div key={v.id} className="glass-card glass-card-hover p-5 flex gap-4 group">
                   {v.thumbnail_url ? (
                     <img src={v.thumbnail_url} alt="" className="w-32 h-20 object-cover rounded-lg flex-shrink-0 bg-slate-900 border border-white/5" />
                   ) : (
@@ -192,8 +192,8 @@ export default function SearchPage() {
                 </div>
               ))
             : results.map((r: any) => (
-                <div key={r.segment_id} className="glass-card glass-card-hover p-5 card-accent-purple group">
-                  <div className="flex items-start justify-between gap-4 mb-3">
+                <div key={r.segment_id} className="glass-card glass-card-hover p-5 card-accent-purple group flex flex-col gap-4">
+                  <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-slate-200 group-hover:text-purple-400 transition-colors truncate">
                         {r.video_title}

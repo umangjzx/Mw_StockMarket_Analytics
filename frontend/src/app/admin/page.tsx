@@ -14,23 +14,12 @@ import {
 } from "@/lib/hooks";
 import { adminApi } from "@/lib/api";
 import { fmtDateTime, fmtLarge } from "@/lib/utils";
+import { pipelineStatusColorValue } from "@/lib/constants";
 import { PipelineBadge } from "@/components/ui/Badge";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 import { ErrorState, EmptyState } from "@/components/ui/ErrorState";
+import { SectionHeader } from "@/components/ui/SectionHeader";
 import { useSWRConfig } from "swr";
-
-// ── Status colours for pie chart ───────────────────────────────────────────────
-const STATUS_COLORS: Record<string, string> = {
-  INDEXED:           "#22c55e",
-  ANALYZED:          "#3b82f6",
-  EMBEDDED:          "#a855f7",
-  TRANSCRIPT_READY:  "#14b8a6",
-  TRANSCRIPT_PENDING:"#f59e0b",
-  ANALYSIS_PENDING:  "#f97316",
-  EMBEDDING_PENDING: "#8b5cf6",
-  DISCOVERED:        "#64748b",
-  FAILED:            "#ef4444",
-};
 
 // ── Pipeline Status Donut ──────────────────────────────────────────────────────
 function PipelineStatusDonut() {
@@ -46,20 +35,21 @@ function PipelineStatusDonut() {
     name: c.status.replace(/_/g, " "),
     value: c.count,
     status: c.status,
-    color: STATUS_COLORS[c.status] ?? "#64748b",
+    color: pipelineStatusColorValue(c.status),
   }));
 
   return (
     <div className="glass-card p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-          <BarChart2 size={15} className="text-blue-400" />
-          Pipeline Status
-        </h3>
-        <button onClick={() => mutate()} className="btn-ghost p-1.5 rounded-lg" title="Refresh">
-          <RefreshCw size={13} />
-        </button>
-      </div>
+      <SectionHeader
+        icon={BarChart2}
+        iconColor="blue"
+        title="Pipeline Status"
+        action={
+          <button onClick={() => mutate()} className="btn-ghost p-1.5 rounded-lg" title="Refresh">
+            <RefreshCw size={13} />
+          </button>
+        }
+      />
       <div className="flex items-center gap-4">
         <ResponsiveContainer width={140} height={140}>
           <PieChart>
@@ -126,18 +116,23 @@ function FailuresTable() {
 
   return (
     <div className="glass-card p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-          <AlertTriangle size={15} className="text-red-400" />
-          Failed Videos
-          {failures.length > 0 && (
-            <span className="badge-bear text-[10px] px-2 py-0.5 rounded-full font-bold">{failures.length}</span>
-          )}
-        </h3>
-        <button onClick={() => mutate()} className="btn-ghost p-1.5 rounded-lg" title="Refresh">
-          <RefreshCw size={13} />
-        </button>
-      </div>
+      <SectionHeader
+        icon={AlertTriangle}
+        iconColor="red"
+        title={
+          <>
+            Failed Videos
+            {failures.length > 0 && (
+              <span className="badge-bear text-[10px] px-2 py-0.5 rounded-full font-bold">{failures.length}</span>
+            )}
+          </>
+        }
+        action={
+          <button onClick={() => mutate()} className="btn-ghost p-1.5 rounded-lg" title="Refresh">
+            <RefreshCw size={13} />
+          </button>
+        }
+      />
       {failures.length === 0 ? (
         <div className="flex items-center gap-2 py-4 text-sm text-green-400">
           <CheckCircle size={16} />
@@ -150,9 +145,9 @@ function FailuresTable() {
               <tr>
                 <th>Video</th>
                 <th>Status</th>
-                <th>Reason</th>
-                <th>Retries</th>
-                <th>Updated</th>
+                <th className="hidden md:table-cell">Reason</th>
+                <th className="hidden sm:table-cell">Retries</th>
+                <th className="hidden md:table-cell">Updated</th>
                 <th></th>
               </tr>
             </thead>
@@ -171,11 +166,11 @@ function FailuresTable() {
                     </a>
                   </td>
                   <td><PipelineBadge status={v.pipeline_status} /></td>
-                  <td className="max-w-[200px]">
+                  <td className="max-w-[200px] hidden md:table-cell">
                     <span className="text-xs text-red-400 truncate block">{v.pipeline_failure_reason ?? "—"}</span>
                   </td>
-                  <td className="font-mono text-center">{v.pipeline_retry_count ?? 0}</td>
-                  <td className="text-slate-500 text-xs">{fmtDateTime(v.updated_at)}</td>
+                  <td className="font-mono text-center hidden sm:table-cell">{v.pipeline_retry_count ?? 0}</td>
+                  <td className="text-slate-500 text-xs hidden md:table-cell">{fmtDateTime(v.updated_at)}</td>
                   <td>
                     <button
                       id={`retry-btn-${v.id}`}
@@ -219,15 +214,16 @@ function SchedulerTable() {
 
   return (
     <div className="glass-card p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-          <Clock size={15} className="text-purple-400" />
-          Scheduler Jobs
-        </h3>
-        <button onClick={() => mutate()} className="btn-ghost p-1.5 rounded-lg" title="Refresh">
-          <RefreshCw size={13} />
-        </button>
-      </div>
+      <SectionHeader
+        icon={Clock}
+        iconColor="purple"
+        title="Scheduler Jobs"
+        action={
+          <button onClick={() => mutate()} className="btn-ghost p-1.5 rounded-lg" title="Refresh">
+            <RefreshCw size={13} />
+          </button>
+        }
+      />
       {jobs.length === 0 ? (
         <EmptyState icon={Clock} title="No jobs found" description="Scheduler jobs will appear here" />
       ) : (
@@ -236,9 +232,9 @@ function SchedulerTable() {
             <thead>
               <tr>
                 <th>Job Name</th>
-                <th>Schedule</th>
-                <th>Last Run</th>
-                <th>Next Run</th>
+                <th className="hidden md:table-cell">Schedule</th>
+                <th className="hidden lg:table-cell">Last Run</th>
+                <th className="hidden sm:table-cell">Next Run</th>
                 <th></th>
               </tr>
             </thead>
@@ -248,9 +244,9 @@ function SchedulerTable() {
                   <td>
                     <span className="font-mono text-blue-400 text-xs">{job.name}</span>
                   </td>
-                  <td className="text-slate-400 text-xs font-mono">{job.schedule ?? job.cron ?? "—"}</td>
-                  <td className="text-slate-500 text-xs">{fmtDateTime(job.last_run_at) ?? "Never"}</td>
-                  <td className="text-slate-400 text-xs">{fmtDateTime(job.next_run_at) ?? "—"}</td>
+                  <td className="text-slate-400 text-xs font-mono hidden md:table-cell">{job.schedule ?? job.cron ?? "—"}</td>
+                  <td className="text-slate-500 text-xs hidden lg:table-cell">{fmtDateTime(job.last_run_at) ?? "Never"}</td>
+                  <td className="text-slate-400 text-xs hidden sm:table-cell">{fmtDateTime(job.next_run_at) ?? "—"}</td>
                   <td>
                     <button
                       id={`trigger-job-${job.name}`}
@@ -289,10 +285,7 @@ function QuotaCard() {
 
   return (
     <div className="glass-card p-5">
-      <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-4">
-        <Cpu size={15} className="text-teal-400" />
-        Resource Usage
-      </h3>
+      <SectionHeader icon={Cpu} iconColor="teal" title="Resource Usage" />
       <div className="space-y-4">
         {meters.map((m) => (
           <div key={m.label}>
@@ -371,8 +364,8 @@ function TaskLogs() {
                   <tr>
                     <th>Task Name</th>
                     <th>Status</th>
-                    <th>Runtime</th>
-                    <th>Timestamp</th>
+                    <th className="hidden sm:table-cell">Runtime</th>
+                    <th className="hidden md:table-cell">Timestamp</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -388,10 +381,10 @@ function TaskLogs() {
                           {log.status ?? "—"}
                         </span>
                       </td>
-                      <td className="text-slate-500 text-xs font-mono">
+                      <td className="text-slate-500 text-xs font-mono hidden sm:table-cell">
                         {log.runtime_ms != null ? `${log.runtime_ms}ms` : "—"}
                       </td>
-                      <td className="text-slate-500 text-xs">{fmtDateTime(log.created_at)}</td>
+                      <td className="text-slate-500 text-xs hidden md:table-cell">{fmtDateTime(log.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>

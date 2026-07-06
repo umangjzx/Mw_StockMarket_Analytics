@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  TrendingUp, Play, Zap, Clock, ArrowUpRight,
-  BarChart3, PlayCircle, Loader2, Database, Activity, Cpu,
+  TrendingUp, Play, Clock, ArrowUpRight,
+  BarChart3, Database, Activity, Cpu,
   FileText, ChevronDown, ChevronUp, History, X,
 } from "lucide-react";
 import {
@@ -14,26 +14,18 @@ import {
   useTrendingStocks, useSectorHeatmap, useVideos, usePipelineStatus, useLatestReport,
   useQuote, useAnalyst,
 } from "@/lib/hooks";
-import { videoApi } from "@/lib/api";
 import {
   fmtDateTime, changeClass, fmt, fmtPct, consensusLabel, consensusClass,
   getRecentTickers, removeRecentTicker, type RecentTicker,
 } from "@/lib/utils";
+import { StatChip } from "@/components/ui/StatChip";
+import { ChartTooltip } from "@/components/charts/ChartTooltip";
+import { sentimentStyle } from "@/lib/constants";
 import { SentimentBadge, PipelineBadge } from "@/components/ui/Badge";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 
-// ── Custom Recharts Tooltip ───────────────────────────────────────────────────
-function CustomTooltip({ active, payload }: any) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  return (
-    <div className="tooltip">
-      <p className="font-bold text-xs font-mono" style={{ color: "var(--accent-light)" }}>{d.ticker}</p>
-      <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>{d.mentions ?? d.mention_count ?? 0} mentions</p>
-    </div>
-  );
-}
+
 
 // ── Daily Report Card ─────────────────────────────────────────────────────────
 function DailyReportCard() {
@@ -124,28 +116,33 @@ function DailyReportCard() {
               </p>
             </div>
           )}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 min-h-[140px]">
-            {(
-              [
-                ["Most Mentioned", report.most_mentioned_stocks, "var(--accent-light)"],
-                ["Most Bullish", report.most_bullish_stocks, "var(--green)"],
-                ["Most Bearish", report.most_bearish_stocks, "var(--red-light)"],
-              ] as [string, any, string][]
-            ).map(
-              ([title, arr, color]) =>
-                arr && (
-                  <div
-                    key={title}
-                    className="p-3 rounded-xl"
-                    style={{ background: "rgba(0,0,0,0.25)", border: "1px solid var(--border)" }}
-                  >
-                    <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color }}>
-                      {title}
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">{stockChips(arr)}</div>
-                  </div>
-                )
-            )}
+          <div>
+            <p className="text-xs font-medium mb-2" style={{ color: "var(--text-muted)" }}>
+              As mentioned in today's briefing
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 min-h-[140px]">
+              {(
+                [
+                  ["Most Mentioned", report.most_mentioned_stocks, "var(--accent-light)"],
+                  ["Most Bullish", report.most_bullish_stocks, "var(--green)"],
+                  ["Most Bearish", report.most_bearish_stocks, "var(--red-light)"],
+                ] as [string, any, string][]
+              ).map(
+                ([title, arr, color]) =>
+                  arr && (
+                    <div
+                      key={title}
+                      className="p-3 rounded-xl"
+                      style={{ background: "rgba(0,0,0,0.25)", border: "1px solid var(--border)" }}
+                    >
+                      <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color }}>
+                        {title}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">{stockChips(arr)}</div>
+                    </div>
+                  )
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -153,114 +150,7 @@ function DailyReportCard() {
   );
 }
 
-// ── Process URL Form ──────────────────────────────────────────────────────────
-const TERMINAL_STATUSES = new Set(["INDEXED", "FAILED"]);
-const POLL_INTERVAL_MS = 4000;
-const POLL_MAX_ATTEMPTS = 90; // ~6 minutes
 
-function ProcessUrlForm() {
-  const [url, setUrl] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-  const [trackedId, setTrackedId] = useState<string | null>(null);
-  const [pipelineStatus, setPipelineStatus] = useState<string | null>(null);
-  const attemptsRef = useRef(0);
-
-  useEffect(() => {
-    if (!trackedId) return;
-    attemptsRef.current = 0;
-
-    const interval = setInterval(async () => {
-      attemptsRef.current += 1;
-      try {
-        const data: any = await videoApi.list({ external_video_id: trackedId, page_size: 1 });
-        const video = data?.items?.[0];
-        if (video?.pipeline_status) {
-          setPipelineStatus(video.pipeline_status);
-          if (TERMINAL_STATUSES.has(video.pipeline_status)) {
-            clearInterval(interval);
-          }
-        }
-      } catch {
-        // transient — keep polling until max attempts
-      }
-      if (attemptsRef.current >= POLL_MAX_ATTEMPTS) {
-        clearInterval(interval);
-      }
-    }, POLL_INTERVAL_MS);
-
-    return () => clearInterval(interval);
-  }, [trackedId]);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!url.trim()) return;
-    setLoading(true); setResult(null); setPipelineStatus(null); setTrackedId(null);
-    try {
-      const res: any = await videoApi.processUrl(url.trim());
-      setResult("success");
-      setUrl("");
-      if (res?.external_video_id) {
-        setTrackedId(res.external_video_id);
-        setPipelineStatus(res.status === "reprocessing" ? "DISCOVERED" : "DISCOVERED");
-      }
-    } catch (err: any) {
-      setResult(`error:${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <form onSubmit={submit} className="glass-card card-accent-red p-4 flex-shrink-0">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="icon-container icon-red">
-          <PlayCircle size={14} />
-        </div>
-        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Process YouTube Video</h3>
-      </div>
-      <div className="flex gap-2">
-        <input
-          type="url"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://youtu.be/..."
-          className="input-field text-sm"
-          id="process-url-input"
-        />
-        <button
-          type="submit"
-          disabled={loading || !url.trim()}
-          className="btn-primary flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none"
-          id="process-url-btn"
-        >
-          {loading ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
-          {loading ? "Queuing…" : "Process"}
-        </button>
-      </div>
-      {result === "success" && trackedId && (
-        <div className="mt-3 flex items-center gap-2">
-          {pipelineStatus && !TERMINAL_STATUSES.has(pipelineStatus) && (
-            <Loader2 size={11} className="animate-spin" style={{ color: "var(--accent-light)" }} />
-          )}
-          <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-            {pipelineStatus === "INDEXED"
-              ? "✓ Processing complete!"
-              : pipelineStatus === "FAILED"
-              ? "Processing failed — check Admin panel for details"
-              : "Tracking pipeline progress…"}
-          </span>
-          {pipelineStatus && <PipelineBadge status={pipelineStatus} />}
-        </div>
-      )}
-      {result?.startsWith("error:") && (
-        <p className="mt-2 text-xs" style={{ color: "var(--red-light)" }}>
-          {result.slice(6)}
-        </p>
-      )}
-    </form>
-  );
-}
 
 // ── Recently Viewed Stocks ────────────────────────────────────────────────────
 function RecentlyViewedCard({ ticker, onRemove }: { ticker: string; onRemove: (symbol: string) => void }) {
@@ -356,26 +246,11 @@ function PipelineStats() {
 
   return (
     <div className="flex flex-wrap gap-2">
-      <div className="stat-chip">
-        <Database size={11} style={{ color: "var(--accent-light)" }} />
-        <span style={{ color: "var(--text-muted)" }}>Total</span>
-        <span className="chip-value" style={{ color: "var(--text-primary)" }}>{total}</span>
-      </div>
-      <div className="stat-chip">
-        <Activity size={11} style={{ color: "var(--green)" }} />
-        <span style={{ color: "var(--text-muted)" }}>Indexed</span>
-        <span className="chip-value" style={{ color: "var(--green)" }}>{indexed}</span>
-      </div>
-      <div className="stat-chip">
-        <Cpu size={11} style={{ color: "var(--accent)" }} />
-        <span style={{ color: "var(--text-muted)" }}>Analyzed</span>
-        <span className="chip-value" style={{ color: "var(--accent-light)" }}>{analyzed}</span>
-      </div>
+      <StatChip icon={Database} iconColor="var(--accent-light)" label="Total" value={total} />
+      <StatChip icon={Activity} iconColor="var(--green)" label="Indexed" value={indexed} />
+      <StatChip icon={Cpu} iconColor="var(--accent)" label="Analyzed" value={analyzed} />
       {failed > 0 && (
-        <div className="stat-chip">
-          <span style={{ color: "var(--text-muted)" }}>Failed</span>
-          <span className="chip-value" style={{ color: "var(--red-light)" }}>{failed}</span>
-        </div>
+        <StatChip label="Failed" value={failed} valueColor="var(--red-light)" />
       )}
     </div>
   );
@@ -384,13 +259,6 @@ function PipelineStats() {
 // ── Sector Heatmap ────────────────────────────────────────────────────────────
 function SectorHeatmap() {
   const { data, error, isLoading } = useSectorHeatmap();
-
-  const sentimentToColor = (s: string) => {
-    const sl = (s ?? "").toLowerCase();
-    if (sl === "bullish" || sl === "positive") return { bg: "rgba(34,197,94,0.14)", border: "rgba(34,197,94,0.3)", text: "#4ade80" };
-    if (sl === "bearish" || sl === "negative") return { bg: "rgba(244,63,94,0.14)", border: "rgba(244,63,94,0.3)", text: "#fb7185" };
-    return { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.25)", text: "#fbbf24" };
-  };
 
   if (isLoading) return (
     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
@@ -414,14 +282,14 @@ function SectorHeatmap() {
   return (
     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 stagger-children">
       {sectors.slice(0, 12).map((s: any) => {
-        const colors = sentimentToColor(s.sentiment);
+        const style = sentimentStyle(s.sentiment);
         return (
           <div
             key={s.sector}
-            className="heatmap-cell flex flex-col p-3 rounded-xl border border-white/5 min-h-[70px]"
-            style={{ background: colors.bg, border: `1px solid ${colors.border}` }}
+            className="heatmap-cell flex flex-col p-3 rounded-xl min-h-[70px]"
+            style={{ background: style.bg, border: `1px solid ${style.border}` }}
           >
-            <p className="text-[10px] font-bold truncate" style={{ color: colors.text }}>
+            <p className="text-[10px] font-bold truncate" style={{ color: style.text }}>
               {s.sector}
             </p>
             <p
@@ -430,7 +298,7 @@ function SectorHeatmap() {
             >
               {s.mention_count}
             </p>
-            <p className="text-[9px] mt-0.5 capitalize" style={{ color: colors.text }}>
+            <p className="text-[9px] mt-0.5 capitalize" style={{ color: style.text }}>
               {s.sentiment}
             </p>
           </div>
@@ -467,7 +335,19 @@ function TrendingStocksChart({ window }: { window: string }) {
           tick={{ fill: "#3d5070", fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 600 }}
           tickLine={false} axisLine={false}
         />
-        <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.02)" }} />
+        <Tooltip
+          content={<ChartTooltip render={(p) => {
+            const d = p[0]?.payload;
+            if (!d) return null;
+            return (
+              <>
+                <p className="font-bold text-xs font-mono" style={{ color: "var(--accent-light)" }}>{d.ticker}</p>
+                <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>{d.mentions ?? d.mention_count ?? 0} mentions</p>
+              </>
+            );
+          }} />}
+          cursor={{ fill: "rgba(255,255,255,0.02)" }}
+        />
         <Bar dataKey="mentions" radius={[0, 4, 4, 0]} maxBarSize={16}>
           {chartData.map((_: any, i: number) => (
             <Cell
@@ -578,20 +458,15 @@ export default function DashboardPage() {
       <DailyReportCard />
 
       {/* Hero Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-black tracking-tight leading-none" style={{ letterSpacing: "-0.03em" }}>
-            Market{" "}
-            <span className="gradient-text">Intelligence</span>
-          </h1>
-          <p className="text-sm mt-1.5 mb-3" style={{ color: "var(--text-muted)" }}>
-            AI-powered stock market video analysis
-          </p>
-          <PipelineStats />
-        </div>
-        <div className="sm:max-w-xs w-full">
-          <ProcessUrlForm />
-        </div>
+      <div>
+        <h1 className="text-3xl font-black tracking-tight leading-none" style={{ letterSpacing: "-0.03em" }}>
+          Market{" "}
+          <span className="gradient-text">Intelligence</span>
+        </h1>
+        <p className="text-sm mt-1.5 mb-3" style={{ color: "var(--text-muted)" }}>
+          AI-powered stock market video analysis
+        </p>
+        <PipelineStats />
       </div>
 
       {/* Recently Viewed */}

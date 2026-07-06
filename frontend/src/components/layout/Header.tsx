@@ -120,7 +120,7 @@ export function Header() {
             boxShadow: focused ? "0 0 0 4px rgba(59,130,246,0.15), 0 0 25px rgba(59,130,246,0.15)" : "none",
           }}
         >
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--text-muted)" }} />
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-fg" />
           <input
             ref={inputRef}
             id="global-ticker-search"
@@ -131,23 +131,17 @@ export function Header() {
             onFocus={() => { setFocused(true); if (results.length > 0) setOpen(true); }}
             onBlur={() => setFocused(false)}
             placeholder="Search ticker, company…"
-            className="w-full py-2 pl-8 pr-16 text-sm bg-transparent outline-none"
-            style={{
-              color: "var(--text-primary)",
-              fontFamily: "Inter, sans-serif",
-              fontSize: "13px",
-            }}
+            aria-label="Search ticker or company"
+            className="w-full py-2 pl-8 pr-16 font-sans text-[13px] bg-transparent outline-none text-foreground"
           />
           {/* Right decorations */}
           <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-            {loading && <Loader2 size={12} className="animate-spin" style={{ color: "var(--text-muted)" }} />}
+            {loading && <Loader2 size={12} className="animate-spin text-muted-fg" />}
             {query && !loading && (
               <button
                 onClick={() => { setQuery(""); setResults([]); setOpen(false); }}
-                className="p-0.5 rounded transition-colors"
-                style={{ color: "var(--text-muted)" }}
-                onMouseEnter={(e) => e.currentTarget.style.color = "var(--text-primary)"}
-                onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-muted)"}
+                aria-label="Clear search"
+                className="p-0.5 rounded transition-colors text-muted-fg hover:text-foreground"
               >
                 <X size={12} />
               </button>
@@ -184,19 +178,14 @@ export function Header() {
               <button
                 key={`${c.symbol}-${c.exchange ?? i}`}
                 onClick={() => pick(c.symbol)}
-                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-left transition-colors"
-                onMouseEnter={(e) => e.currentTarget.style.background = "rgba(59,130,246,0.07)"}
-                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-accent-dim"
               >
-                <span
-                  className="text-xs font-bold font-mono w-14 flex-shrink-0"
-                  style={{ color: "var(--accent-light)" }}
-                >
+                <span className="text-xs font-bold font-mono w-14 flex-shrink-0 text-accent-light">
                   {c.symbol}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>{c.company_name ?? "—"}</p>
-                  <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-xs truncate text-secondary-fg">{c.company_name ?? "—"}</p>
+                  <p className="text-[10px] text-muted-fg">
                     {[c.exchange, c.sector].filter(Boolean).join(" · ")}
                   </p>
                 </div>

@@ -13,6 +13,7 @@ import { PipelineBadge } from "@/components/ui/Badge";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { ErrorState, EmptyState } from "@/components/ui/ErrorState";
 import { useSWRConfig } from "swr";
+import { Modal } from "@/components/ui/Modal";
 
 // ── Create Watchlist Modal ─────────────────────────────────────────────────────
 function CreateWatchlistModal({ onClose }: { onClose: () => void }) {
@@ -38,44 +39,42 @@ function CreateWatchlistModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="glass-card w-full max-w-md p-6 fade-in border-amber-500/20 shadow-[0_0_40px_rgba(245,158,11,0.1)]">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-black text-white flex items-center gap-2 tracking-tight">
-            <Star size={20} className="text-amber-400" />
-            New <span className="gradient-text-gold">Watchlist</span>
-          </h2>
-          <button onClick={onClose} className="btn-ghost p-2 rounded-full hover:bg-red-500/10 hover:text-red-400">
-            <X size={16} />
+    <Modal onClose={onClose} className="border-amber-500/20 shadow-[0_0_40px_rgba(245,158,11,0.1)]">
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-lg font-black text-white flex items-center gap-2 tracking-tight">
+          <Star size={20} className="text-amber-400" />
+          New <span className="gradient-text-gold">Watchlist</span>
+        </h2>
+        <button onClick={onClose} className="btn-ghost p-2 rounded-full hover:bg-red-500/10 hover:text-red-400">
+          <X size={16} />
+        </button>
+      </div>
+      <form onSubmit={handleCreate} className="space-y-5">
+        <div>
+          <label className="text-xs font-bold text-slate-400 mb-1.5 block uppercase tracking-wider">Watchlist Name</label>
+          <input
+            id="watchlist-name-input"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. AI Winners, Semiconductors…"
+            className="input-field py-2.5 text-sm"
+            autoFocus
+          />
+        </div>
+        {error && (
+          <p className="text-xs font-medium text-red-400 flex items-center gap-1.5 bg-red-500/10 p-2 rounded-md">
+            <AlertCircle size={14} /> {error}
+          </p>
+        )}
+        <div className="flex gap-3 pt-2">
+          <button type="submit" disabled={loading || !name.trim()} className="btn-primary flex-1 justify-center py-2.5 disabled:opacity-50 font-bold">
+            {loading ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+            Create Watchlist
           </button>
         </div>
-        <form onSubmit={handleCreate} className="space-y-5">
-          <div>
-            <label className="text-xs font-bold text-slate-400 mb-1.5 block uppercase tracking-wider">Watchlist Name</label>
-            <input
-              id="watchlist-name-input"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. AI Winners, Semiconductors…"
-              className="input-field py-2.5 text-sm"
-              autoFocus
-            />
-          </div>
-          {error && (
-            <p className="text-xs font-medium text-red-400 flex items-center gap-1.5 bg-red-500/10 p-2 rounded-md">
-              <AlertCircle size={14} /> {error}
-            </p>
-          )}
-          <div className="flex gap-3 pt-2">
-            <button type="submit" disabled={loading || !name.trim()} className="btn-primary flex-1 justify-center py-2.5 disabled:opacity-50 font-bold">
-              {loading ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
-              Create Watchlist
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -103,25 +102,28 @@ function AddTickerForm({ watchlistId, onAdded }: { watchlistId: number; onAdded:
   }
 
   return (
-    <form onSubmit={handleAdd} className="flex gap-2">
-      <input
-        id={`add-ticker-${watchlistId}`}
-        type="text"
-        value={ticker}
-        onChange={(e) => setTicker(e.target.value.toUpperCase())}
-        placeholder="AAPL, TSLA, NVDA…"
-        className="input-field text-sm font-mono flex-1 h-10"
-        style={{ textTransform: "uppercase" }}
-      />
-      <button
-        type="submit"
-        disabled={loading || !ticker.trim()}
-        className="btn-primary px-5 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed font-bold"
-      >
-        {loading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-        Add Ticker
-      </button>
-      {error && <p className="text-xs text-red-400 self-center absolute -bottom-5">{error}</p>}
+    <form onSubmit={handleAdd}>
+      <div className="flex gap-2">
+        <label htmlFor={`add-ticker-${watchlistId}`} className="sr-only">Ticker symbol to add</label>
+        <input
+          id={`add-ticker-${watchlistId}`}
+          type="text"
+          value={ticker}
+          onChange={(e) => setTicker(e.target.value.toUpperCase())}
+          placeholder="AAPL, TSLA, NVDA…"
+          className="input-field text-sm font-mono flex-1 h-10"
+          style={{ textTransform: "uppercase" }}
+        />
+        <button
+          type="submit"
+          disabled={loading || !ticker.trim()}
+          className="btn-primary px-5 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed font-bold"
+        >
+          {loading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+          Add Ticker
+        </button>
+      </div>
+      {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
     </form>
   );
 }

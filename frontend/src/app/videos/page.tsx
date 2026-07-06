@@ -150,6 +150,17 @@ export default function VideosPage() {
                 ))}
               </div>
             </div>
+
+            {(status !== "All" || sentiment !== "All" || contentType !== "All" || ticker !== "") && (
+              <div className="col-span-full pt-2 flex justify-end">
+                <button
+                  onClick={() => { setStatus("All"); setSentiment("All"); setContentType("All"); setTicker(""); setSearchInput(""); setPage(1); }}
+                  className="text-xs font-bold text-slate-400 hover:text-red-400 transition-colors tracking-wide flex items-center gap-1.5 bg-white/5 hover:bg-red-500/10 px-3 py-1.5 rounded-lg border border-white/5 hover:border-red-500/20"
+                >
+                  Clear All Filters
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -206,20 +217,20 @@ export default function VideosPage() {
                     )}
                   </div>
                   <div className="flex gap-2">
+                    <Link
+                      href={`/videos?id=${v.id}`}
+                      className="btn-primary flex-1 justify-center py-2 text-xs font-bold"
+                    >
+                       Details
+                    </Link>
                     <a
                       href={v.video_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 text-center text-xs font-semibold text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 py-2 rounded-lg border border-white/5 hover:border-white/20 transition-all flex items-center justify-center gap-1.5"
+                      className="btn-ghost border border-white/5 flex-1 justify-center py-2 text-xs font-bold flex items-center gap-1.5 text-slate-300 hover:text-white"
                     >
                       <Play size={12} className="text-red-400" /> Watch
                     </a>
-                    <Link
-                      href={`/videos?id=${v.id}`}
-                      className="flex-1 text-center text-xs font-semibold text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 py-2 rounded-lg border border-blue-500/20 hover:border-blue-400/40 transition-all flex items-center justify-center gap-1.5"
-                    >
-                       Details
-                    </Link>
                   </div>
                 </div>
               </div>

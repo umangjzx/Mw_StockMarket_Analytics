@@ -1,12 +1,13 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useState, useRef } from "react";
 import {
   TrendingUp, TrendingDown, Globe, Users, Building,
   Calendar, ExternalLink, RefreshCw, ChevronUp, ChevronDown,
   Minus, AlertTriangle, CheckCircle, BarChart2, Activity,
   Newspaper, UserCheck, Brain, Video, MessageSquare, Target,
   ArrowUpRight, ArrowDownRight, Eye, Bookmark, Loader2, X, Clock,
+  Send, Database
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -26,7 +27,8 @@ import {
 import { SentimentBadge, Badge } from "@/components/ui/Badge";
 import { Skeleton, SkeletonCard, SkeletonTable } from "@/components/ui/Skeleton";
 import { ErrorState, EmptyState } from "@/components/ui/ErrorState";
-import { MetricCard, StatRow } from "@/components/ui/MetricCard";
+import { MetricCard, StatRow, MetricGridCell } from "@/components/ui/MetricCard";
+import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { useSWRConfig } from "swr";
 
@@ -74,8 +76,8 @@ function QuoteHero({ ticker }: { ticker: string }) {
             { label: "Prev Close", value: fmt(q.prev_close, 2) },
             { label: "Volume",     value: fmtLarge(q.volume) },
             { label: "Mkt Cap",    value: fmtLarge(q.market_cap) },
-            { label: "52W High",   value: fmt(q.week52_high, 2) },
-            { label: "52W Low",    value: fmt(q.week52_low, 2) },
+            // 52W high/low intentionally omitted here — already shown by the
+            // range bar below, which also conveys where price sits between them.
           ].map((s) => (
             <div key={s.label} className="min-w-[80px]">
               <p className="text-[10px] text-slate-600 uppercase tracking-wider font-semibold">{s.label}</p>
@@ -128,6 +130,9 @@ function TrackTickerPrompt({ ticker }: { ticker: string }) {
   const [added, setAdded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
+  // null = still checking, so the prompt stays hidden rather than flashing
+  // on for an already-tracked ticker before we know better.
+  const [alreadyTracked, setAlreadyTracked] = useState<boolean | null>(null);
 
   useEffect(() => {
     setDismissed(sessionStorage.getItem(`track-dismissed-${ticker}`) === "1");
@@ -135,6 +140,21 @@ function TrackTickerPrompt({ ticker }: { ticker: string }) {
     setError(null);
     setShowPicker(false);
   }, [ticker]);
+
+  useEffect(() => {
+    if (!data) return; // watchlist list itself hasn't loaded yet
+    if (!watchlists.length) { setAlreadyTracked(false); return; }
+    let cancelled = false;
+    Promise.all(watchlists.map((wl: any) => watchlistApi.get(wl.id)))
+      .then((results: any[]) => {
+        if (cancelled) return;
+        const tracked = results.some((r: any) => (r?.items ?? []).some((it: any) => it.symbol === ticker));
+        setAlreadyTracked(tracked);
+      })
+      .catch(() => { if (!cancelled) setAlreadyTracked(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticker, data]);
 
   function dismiss() {
     setDismissed(true);
@@ -176,7 +196,7 @@ function TrackTickerPrompt({ ticker }: { ticker: string }) {
     setShowPicker(true);
   }
 
-  if (dismissed) return null;
+  if (dismissed || alreadyTracked !== false) return null;
 
   return (
     <div className="glass-card card-accent-purple p-4 flex flex-wrap items-center gap-3">
@@ -243,24 +263,26 @@ function PriceChart({ ticker }: { ticker: string }) {
 
   return (
     <div className="glass-card p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-          <Activity size={14} className="text-blue-400" /> Price Chart
-        </h3>
-        <div className="flex gap-1 flex-wrap justify-end">
-          {RANGES.map((r) => (
-            <button
-              key={r}
-              onClick={() => setRange(r)}
-              className={`text-[10px] px-2 py-0.5 rounded font-semibold transition-all ${
-                range === r ? "bg-blue-600/20 text-blue-400 border border-blue-500/30" : "text-slate-500 hover:text-slate-300"
-              }`}
-            >
-              {r.toUpperCase()}
-            </button>
-          ))}
-        </div>
-      </div>
+      <SectionHeader
+        icon={Activity}
+        iconColor="blue"
+        title="Price Chart"
+        action={
+          <div className="flex gap-1 flex-wrap justify-end">
+            {RANGES.map((r) => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={`text-[10px] px-2 py-0.5 rounded font-semibold transition-all ${
+                  range === r ? "bg-blue-600/20 text-blue-400 border border-blue-500/30" : "text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                {r.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
       {showsPastSession && (
         <div className="flex items-center gap-2 mb-3 text-xs px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400">
@@ -287,9 +309,7 @@ function ProfilePanel({ ticker }: { ticker: string }) {
   if (isLoading) return <SkeletonCard rows={5} />;
   return (
     <div className="glass-card p-5 space-y-4">
-      <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-        <Building size={14} className="text-blue-400" /> Company Profile
-      </h3>
+      <SectionHeader icon={Building} iconColor="blue" title="Company Profile" />
       {p.description && (
         <p className="text-xs text-slate-400 leading-relaxed">{p.description}</p>
       )}
@@ -349,15 +369,10 @@ function RatiosPanel({ ticker }: { ticker: string }) {
 
   return (
     <div className="glass-card p-5">
-      <h3 className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2">
-        <BarChart2 size={14} className="text-blue-400" /> Key Ratios
-      </h3>
+      <SectionHeader icon={BarChart2} iconColor="blue" title="Key Ratios" />
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {metrics.map((m) => (
-          <div key={m.label} className="bg-slate-900/50 rounded-lg p-2.5">
-            <p className="text-[10px] text-slate-600 uppercase tracking-wider font-semibold">{m.label}</p>
-            <p className="text-sm font-mono font-bold text-slate-200 mt-0.5">{m.value}</p>
-          </div>
+          <MetricGridCell key={m.label} label={m.label} value={m.value} />
         ))}
       </div>
     </div>
@@ -370,7 +385,7 @@ function TechnicalsPanel({ ticker }: { ticker: string }) {
   const t: any = (data as any)?.technicals ?? {};
   if (isLoading) return <SkeletonCard rows={6} />;
 
-  const rsiColor = (v: number) => v > 70 ? "text-red-400" : v < 30 ? "text-green-400" : "text-amber-400";
+  const rsiColorValue = (v: number) => v > 70 ? "var(--red-light)" : v < 30 ? "var(--green-light)" : "var(--amber-light)";
 
   return (
     <div className="space-y-4">
@@ -387,29 +402,27 @@ function TechnicalsPanel({ ticker }: { ticker: string }) {
 
       {/* Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div className="glass-card p-3">
-          <p className="text-[10px] text-slate-600 uppercase tracking-wider font-semibold">RSI (14)</p>
-          <p className={`text-xl font-bold font-mono mt-1 ${t.rsi_14 != null ? rsiColor(t.rsi_14) : "text-slate-400"}`}>
-            {fmt(t.rsi_14, 1)}
-          </p>
-          <p className="text-[10px] text-slate-600 mt-0.5">
-            {t.rsi_14 > 70 ? "Overbought" : t.rsi_14 < 30 ? "Oversold" : "Neutral"}
-          </p>
-        </div>
-
-        <div className="glass-card p-3">
-          <p className="text-[10px] text-slate-600 uppercase tracking-wider font-semibold">MACD</p>
-          <p className={`text-sm font-bold font-mono mt-1 ${(t.macd?.histogram ?? 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
-            {fmt(t.macd?.macd_line)}
-          </p>
-          <p className="text-[10px] text-slate-600">Signal: {fmt(t.macd?.signal_line)}</p>
-        </div>
-
-        <div className="glass-card p-3">
-          <p className="text-[10px] text-slate-600 uppercase tracking-wider font-semibold">ATR (14)</p>
-          <p className="text-sm font-bold font-mono mt-1 text-slate-200">{fmt(t.atr_14)}</p>
-          <p className="text-[10px] text-slate-600">Stoch RSI: {fmt(t.stochastic_rsi_14, 1)}</p>
-        </div>
+        {/* RSI intentionally renders at text-xl (vs text-sm for its siblings) —
+            pre-existing size inconsistency the audit flagged; preserved as-is
+            here rather than silently deciding whether to shrink it. */}
+        <MetricGridCell
+          label="RSI (14)"
+          value={fmt(t.rsi_14, 1)}
+          valueColor={t.rsi_14 != null ? rsiColorValue(t.rsi_14) : undefined}
+          sub={t.rsi_14 > 70 ? "Overbought" : t.rsi_14 < 30 ? "Oversold" : "Neutral"}
+          valueClassName="text-xl"
+        />
+        <MetricGridCell
+          label="MACD"
+          value={fmt(t.macd?.macd_line)}
+          valueColor={(t.macd?.histogram ?? 0) >= 0 ? "var(--green-light)" : "var(--red-light)"}
+          sub={`Signal: ${fmt(t.macd?.signal_line)}`}
+        />
+        <MetricGridCell
+          label="ATR (14)"
+          value={fmt(t.atr_14)}
+          sub={`Stoch RSI: ${fmt(t.stochastic_rsi_14, 1)}`}
+        />
       </div>
 
       {/* SMAs */}
@@ -706,23 +719,24 @@ function ExecutiveSummaryPanel({ ticker }: { ticker: string }) {
     <div className="space-y-4">
       {/* Header */}
       <div className="glass-card p-5 border border-blue-500/15">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Brain size={16} className="text-purple-400" />
-            <span className="text-sm font-semibold text-slate-200">AI Executive Summary</span>
-          </div>
-          <div className="flex items-center gap-3">
-            {sentColor && <SentimentBadge sentiment={sentColor} />}
-            {s.confidence_score != null && (
-              // confidence_score is already 0-100 (see company_executive_summary
-              // prompt spec) — not a fraction, so no *100 and no fmtPct's +/- sign
-              <span className="text-[10px] text-slate-600">Confidence: {s.confidence_score.toFixed(0)}%</span>
-            )}
-            <button onClick={() => mutate()} className="btn-ghost text-xs py-1">
-              <RefreshCw size={12} />
-            </button>
-          </div>
-        </div>
+        <SectionHeader
+          icon={Brain}
+          iconColor="purple"
+          title="AI Executive Summary"
+          action={
+            <div className="flex items-center gap-3">
+              {sentColor && <SentimentBadge sentiment={sentColor} />}
+              {s.confidence_score != null && (
+                // confidence_score is already 0-100 (see company_executive_summary
+                // prompt spec) — not a fraction, so no *100 and no fmtPct's +/- sign
+                <span className="text-[10px] text-slate-600">Confidence: {s.confidence_score.toFixed(0)}%</span>
+              )}
+              <button onClick={() => mutate()} className="btn-ghost text-xs py-1">
+                <RefreshCw size={12} />
+              </button>
+            </div>
+          }
+        />
 
         {s.business_overview && (
           <p className="text-sm text-slate-300 leading-relaxed">{s.business_overview}</p>
@@ -813,9 +827,14 @@ function ExecutiveSummaryPanel({ ticker }: { ticker: string }) {
 
 // ── Company Chat ───────────────────────────────────────────────────────────────
 function CompanyChat({ ticker }: { ticker: string }) {
-  const [messages, setMessages] = useState<{ role: "user" | "ai"; content: string; citations?: any[] }[]>([]);
+  const [messages, setMessages] = useState<{ role: "user" | "ai"; content: string; citations?: any[]; retrieved?: number; model?: string }[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   async function send() {
     if (!input.trim() || loading) return;
@@ -825,7 +844,13 @@ function CompanyChat({ ticker }: { ticker: string }) {
     setLoading(true);
     try {
       const res: any = await companyApi.chat(ticker, { question, top_k: 8 });
-      setMessages((m) => [...m, { role: "ai", content: res.answer, citations: res.citations }]);
+      setMessages((m) => [...m, { 
+        role: "ai", 
+        content: res.answer, 
+        citations: res.citations,
+        retrieved: res.retrieved_chunks,
+        model: res.model_used
+      }]);
     } catch (e: any) {
       setMessages((m) => [...m, { role: "ai", content: `Error: ${e.message}` }]);
     } finally {
@@ -834,67 +859,103 @@ function CompanyChat({ ticker }: { ticker: string }) {
   }
 
   return (
-    <div className="glass-card flex flex-col" style={{ height: 500 }}>
+    <div className="glass-card flex flex-col" style={{ height: 600 }}>
+      {/* Not using SectionHeader here — its fixed 1rem margin-bottom would add
+          unwanted height to this compact toolbar-style bar (its padded parent
+          doesn't collapse a trailing child margin against its own edge). */}
       <div className="flex items-center gap-2 p-4 border-b border-white/5">
         <MessageSquare size={14} className="text-blue-400" />
         <span className="text-sm font-semibold text-slate-200">Ask about {ticker}</span>
         <span className="text-[10px] text-slate-600 ml-auto">Powered by RAG + Ollama</span>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-black/20">
         {messages.length === 0 && (
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex-1 flex items-center justify-center h-full fade-in">
             <EmptyState
-              title="Ask anything about this stock"
+              title={`Ask anything about ${ticker}`}
               description="Questions are answered using AI-analyzed YouTube video transcripts"
             />
           </div>
         )}
         {messages.map((m, i) => (
-          <div key={i} className={m.role === "user" ? "chat-bubble-user" : "chat-bubble-ai"}>
-            <p className="text-sm leading-relaxed">{m.content}</p>
-            {(m.citations?.length ?? 0) > 0 && (
-              <div className="mt-2 pt-2 border-t border-white/10 space-y-1">
-                {m.citations?.map((c: any, ci: number) => (
-                  <a
-                    key={ci}
-                    href={`https://youtube.com/watch?v=${c.video_id}&t=${Math.floor(c.start_seconds ?? 0)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-[10px] text-blue-400 hover:text-blue-300 truncate"
-                  >
-                    [{ci + 1}] {c.video_title} — {c.channel_name}
-                  </a>
-                ))}
-              </div>
-            )}
+          <div key={i} className={`flex fade-in ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div className={`max-w-[90%] sm:max-w-[80%] rounded-2xl p-5 ${
+              m.role === "user" 
+                ? "bg-blue-600 text-white shadow-md shadow-blue-900/20 rounded-tr-sm" 
+                : "glass-card card-accent-blue bg-black/60 shadow-lg rounded-tl-sm"
+            }`}>
+              <p className={`text-[14px] leading-relaxed whitespace-pre-wrap ${m.role === "user" ? "text-white" : "text-slate-200"}`}>
+                {m.content}
+              </p>
+
+              {m.citations && m.citations.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-white/10 space-y-2">
+                  <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                    <Database size={11} />
+                    Synthesized from {m.retrieved ?? m.citations.length} sources
+                  </p>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {m.citations.map((c: any, ci: number) => (
+                      <a
+                        key={ci}
+                        href={`https://youtube.com/watch?v=${c.video_id}&t=${Math.floor(c.start_seconds ?? 0)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-[11px] text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 hover:border-blue-500/30 pl-1.5 pr-2.5 py-1 rounded-md transition-all group"
+                      >
+                        <span className="font-mono text-blue-400 font-bold bg-blue-500/10 px-1.5 rounded text-[10px]">[{ci + 1}]</span>
+                        <span className="max-w-[200px] truncate">{c.video_title}</span>
+                        <ExternalLink size={10} className="opacity-40 group-hover:opacity-100 text-blue-400 transition-opacity" />
+                      </a>
+                    ))}
+                  </div>
+                  {m.model && <p className="text-[9px] text-slate-600 mt-3 font-mono">Generative Engine: {m.model}</p>}
+                </div>
+              )}
+            </div>
           </div>
         ))}
         {loading && (
-          <div className="chat-bubble-ai">
-            <div className="flex gap-1 items-center">
-              <div className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: "0ms" }} />
-              <div className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: "150ms" }} />
-              <div className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: "300ms" }} />
+          <div className="flex justify-start fade-in">
+            <div className="glass-card card-accent-purple bg-black/60 rounded-2xl rounded-tl-sm p-5 w-24 flex justify-center shadow-lg">
+              <div className="flex gap-1.5 items-center">
+                <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: "0ms" }} />
+                <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: "150ms" }} />
+                <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: "300ms" }} />
+              </div>
             </div>
           </div>
         )}
+        <div ref={bottomRef} />
       </div>
 
-      <div className="p-3 border-t border-white/5 flex gap-2">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
-          placeholder={`Ask about ${ticker}…`}
-          className="input-field text-sm"
-          id="company-chat-input"
-          disabled={loading}
-        />
-        <button onClick={send} disabled={loading || !input.trim()} className="btn-primary flex-shrink-0 disabled:opacity-50">
-          Send
-        </button>
+      <div className="p-4 bg-gradient-to-t from-black via-black/80 to-transparent">
+        <div className="relative group">
+          {/* Glow behind input */}
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500/30 to-purple-500/30 rounded-xl blur opacity-30 group-focus-within:opacity-100 transition duration-500" />
+          <div className="relative flex gap-3 bg-black border border-white/10 rounded-xl p-2 shadow-2xl">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+              placeholder={`Ask about ${ticker}… (Enter to send)`}
+              className="w-full bg-transparent border-none outline-none text-[14px] text-white placeholder-slate-500 resize-none p-3 focus:ring-0"
+              id="company-chat-input"
+              rows={1}
+              style={{ minHeight: "44px", maxHeight: "160px" }}
+              disabled={loading}
+            />
+            <button
+              onClick={send}
+              disabled={loading || !input.trim()}
+              className="w-12 h-12 flex-shrink-0 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-lg flex items-center justify-center transition-all disabled:opacity-50 self-end shadow-md"
+              id="chat-send-btn"
+            >
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} className="-ml-0.5" />}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -979,26 +1040,44 @@ function VideoIntelligencePanel({ ticker }: { ticker: string }) {
   );
 }
 
+// ── Tab groups ───────────────────────────────────────────────────────────────
+// Financial/factual data vs. this app's actual differentiator (AI synthesis,
+// video intelligence, chat) — split into two groups instead of 9 equally-
+// weighted tabs, defaulting to Intelligence since that's what's easy to miss
+// as "tab 7 of 9" in the old flat layout.
+const TAB_GROUPS = {
+  intelligence: {
+    label: "Intelligence",
+    tabs: [
+      { id: "ai-summary", label: "AI Summary" },
+      { id: "videos",     label: "Video Intel" },
+      { id: "chat",       label: "Chat" },
+    ],
+  },
+  financials: {
+    label: "Financials",
+    tabs: [
+      { id: "overview",   label: "Overview" },
+      { id: "financials", label: "Financials" },
+      { id: "earnings",   label: "Earnings" },
+      { id: "technicals", label: "Technicals" },
+      { id: "analyst",    label: "Analyst" },
+      { id: "news",       label: "News" },
+    ],
+  },
+} as const;
+
+type TabGroupKey = keyof typeof TAB_GROUPS;
+
 // ── Main Company Page ──────────────────────────────────────────────────────────
 export default function CompanyPage({ params }: { params: Promise<{ ticker: string }> }) {
   const { ticker } = use(params);
   const upper = ticker.toUpperCase();
+  const [group, setGroup] = useState<TabGroupKey>("intelligence");
 
   useEffect(() => {
     addRecentTicker(upper);
   }, [upper]);
-
-  const TABS = [
-    { id: "overview",     label: "Overview" },
-    { id: "financials",   label: "Financials" },
-    { id: "earnings",     label: "Earnings" },
-    { id: "technicals",   label: "Technicals" },
-    { id: "news",         label: "News" },
-    { id: "analyst",      label: "Analyst" },
-    { id: "ai-summary",   label: "AI Summary" },
-    { id: "videos",       label: "Video Intel" },
-    { id: "chat",         label: "Chat" },
-  ];
 
   return (
     <div className="p-6 space-y-5 max-w-[1400px] mx-auto fade-in">
@@ -1010,18 +1089,32 @@ export default function CompanyPage({ params }: { params: Promise<{ ticker: stri
         </div>
       </div>
 
-      {/* Track this stock? */}
-      <TrackTickerPrompt ticker={upper} />
-
       {/* Quote Hero */}
       <QuoteHero ticker={upper} />
 
       {/* Price Chart */}
       <PriceChart ticker={upper} />
 
+      {/* Track this stock? — placed below the content someone came to see,
+          not as the very first thing on every page load */}
+      <TrackTickerPrompt ticker={upper} />
+
       {/* Tabbed Content */}
       <div className="glass-card p-0 overflow-hidden">
-        <Tabs tabs={TABS} defaultTab="overview">
+        <div className="flex items-center justify-between px-5 pt-4">
+          <div className="window-pill-group">
+            {(Object.keys(TAB_GROUPS) as TabGroupKey[]).map((g) => (
+              <button
+                key={g}
+                onClick={() => setGroup(g)}
+                className={`window-pill ${group === g ? "active" : ""}`}
+              >
+                {TAB_GROUPS[g].label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <Tabs key={group} tabs={[...TAB_GROUPS[group].tabs]} defaultTab={TAB_GROUPS[group].tabs[0].id}>
           {(active) => (
             <div className="px-5 pb-5">
               {active === "overview"   && (

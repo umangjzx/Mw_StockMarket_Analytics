@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { Modal } from "@/components/ui/Modal";
+import { ProcessVideoForm } from "@/components/ProcessVideoForm";
 
 const NAV_MAIN = [
   { href: "/",          icon: LayoutDashboard, label: "Dashboard",  color: "text-blue-400" },
@@ -27,6 +29,7 @@ const NAV_TOOLS = [
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [showProcessModal, setShowProcessModal] = useState(false);
 
   const renderNav = (items: typeof NAV_MAIN) =>
     items.map(({ href, icon: Icon, label, color }) => {
@@ -111,6 +114,26 @@ export function Sidebar() {
         )}
       </div>
 
+      {/* Process Video Quick Action */}
+      <div className="px-3 py-2">
+        <button
+          onClick={() => setShowProcessModal(true)}
+          title={collapsed ? "Process YouTube Video" : undefined}
+          className={cn(
+            "w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-xs",
+            collapsed && "justify-center px-0",
+          )}
+          style={{
+            background: "rgba(244,63,94,0.08)",
+            border: "1px solid rgba(244,63,94,0.2)",
+            color: "var(--red-light)"
+          }}
+        >
+          <Zap size={14} className="flex-shrink-0" />
+          {!collapsed && <span className="font-semibold truncate">Process Video</span>}
+        </button>
+      </div>
+
       {/* Nav */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
         {/* Main */}
@@ -175,6 +198,12 @@ export function Sidebar() {
           }
         </button>
       </div>
+
+      {showProcessModal && (
+        <Modal onClose={() => setShowProcessModal(false)} title="Process YouTube Video">
+          <ProcessVideoForm />
+        </Modal>
+      )}
     </aside>
   );
 }

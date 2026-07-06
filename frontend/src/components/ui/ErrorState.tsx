@@ -13,6 +13,8 @@ export function ErrorState({ message = "Failed to load data", onRetry, compact }
     return (
       <div
         className="flex items-center gap-2 text-sm py-2.5 px-3 rounded-lg"
+        role="status"
+        aria-live="polite"
         style={{
           background: "rgba(244,63,94,0.07)",
           border: "1px solid rgba(244,63,94,0.2)",
@@ -24,6 +26,7 @@ export function ErrorState({ message = "Failed to load data", onRetry, compact }
         {onRetry && (
           <button
             onClick={onRetry}
+            aria-label="Retry"
             className="ml-auto p-1 rounded transition-colors"
             style={{ color: "var(--text-muted)" }}
             onMouseEnter={(e) => e.currentTarget.style.color = "var(--text-primary)"}
@@ -37,7 +40,7 @@ export function ErrorState({ message = "Failed to load data", onRetry, compact }
   }
 
   return (
-    <div className="glass-card p-10 flex flex-col items-center gap-4 text-center">
+    <div className="glass-card p-10 flex flex-col items-center gap-4 text-center" role="alert">
       <div
         className="w-14 h-14 rounded-2xl flex items-center justify-center"
         style={{ background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.2)" }}
@@ -49,7 +52,7 @@ export function ErrorState({ message = "Failed to load data", onRetry, compact }
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>{message}</p>
       </div>
       {onRetry && (
-        <button onClick={onRetry} className="btn-ghost text-sm">
+        <button onClick={onRetry} aria-label="Retry" className="btn-ghost text-sm">
           <RefreshCw size={13} /> Retry
         </button>
       )}
@@ -71,7 +74,7 @@ export function EmptyState({
     : Icon as React.ReactNode;
 
   return (
-    <div className="flex flex-col items-center gap-3 py-14 text-center">
+    <div className="flex flex-col items-center gap-3 py-14 text-center" aria-live="polite">
       <div
         className="w-12 h-12 rounded-xl flex items-center justify-center mb-1"
         style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}

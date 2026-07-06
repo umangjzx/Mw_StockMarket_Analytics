@@ -38,6 +38,31 @@ export function MetricCard({ label, value, sub, trend, className, accent }: Metr
   );
 }
 
+interface MetricGridCellProps {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  valueColor?: string; // for conditional coloring, e.g. RSI overbought/oversold
+  valueClassName?: string; // override the value text's size, e.g. a cell needing more emphasis
+  className?: string;
+}
+
+// Sized for a dense grid of small stats (Key Ratios, Technicals) — MetricCard
+// above is built for hero-sized single metrics and is too large for that case.
+// Replaces 2+ previously-inline "metric cell" implementations that duplicated
+// this same visual job with slightly different markup per callsite.
+export function MetricGridCell({ label, value, sub, valueColor, valueClassName, className }: MetricGridCellProps) {
+  return (
+    <div className={cn("bg-elevated/50 rounded-token-sm p-2.5", className)}>
+      <p className="text-[10px] text-muted-fg uppercase tracking-wider font-semibold">{label}</p>
+      <p className={cn("font-mono font-bold mt-0.5", valueClassName ?? "text-sm")} style={{ color: valueColor ?? "var(--text-primary)" }}>
+        {value ?? "—"}
+      </p>
+      {sub && <p className="text-[10px] text-muted-fg mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
 interface StatRowProps {
   label: string;
   value: React.ReactNode;
