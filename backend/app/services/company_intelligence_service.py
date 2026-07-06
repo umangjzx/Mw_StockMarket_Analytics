@@ -44,6 +44,21 @@ def _ticker_identity(ticker: Ticker) -> dict:
     }
 
 
+def _dedupe_candidates_by_symbol(candidates: list[dict]) -> list[dict]:
+    """Dual-listed tickers (e.g. an Indian stock on both NSE and BSE) can
+    resolve to multiple provider matches that share the same bare symbol
+    once the exchange suffix is stripped — keep first-seen only, since
+    they're functionally identical entry points into the same company page."""
+    seen: set[str] = set()
+    deduped = []
+    for c in candidates:
+        key = (c.get("symbol") or "").upper()
+        if key and key not in seen:
+            seen.add(key)
+            deduped.append(c)
+    return deduped
+
+
 def _video_summary(video) -> dict:
     return {
         "id": video.id,
@@ -232,16 +247,17 @@ class CompanyIntelligenceService:
             for t in c.tickers
         ]
         if local_matches:
-            return local_matches
+            return _dedupe_candidates_by_symbol(local_matches)
 
         provider_matches = await self._market_provider.search_symbol(query)
-        return [
+        candidates = [
             {
                 "ticker_id": None, "symbol": m.symbol, "exchange": m.exchange,
                 "company_id": None, "company_name": m.name, "sector": None, "industry": None,
             }
             for m in provider_matches
         ]
+        return _dedupe_candidates_by_symbol(candidates)
 
     async def resolve_ticker(self, query: str) -> Ticker:
         query = query.strip()

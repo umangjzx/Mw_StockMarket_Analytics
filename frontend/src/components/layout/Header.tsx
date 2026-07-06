@@ -180,9 +180,9 @@ export function Header() {
               zIndex: 50,
             }}
           >
-            {results.slice(0, 8).map((c) => (
+            {results.slice(0, 8).map((c, i) => (
               <button
-                key={c.symbol}
+                key={`${c.symbol}-${c.exchange ?? i}`}
                 onClick={() => pick(c.symbol)}
                 className="w-full flex items-center gap-3 px-3.5 py-2.5 text-left transition-colors"
                 onMouseEnter={(e) => e.currentTarget.style.background = "rgba(59,130,246,0.07)"}

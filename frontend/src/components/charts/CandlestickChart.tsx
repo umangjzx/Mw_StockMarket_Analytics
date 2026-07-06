@@ -21,8 +21,16 @@ interface Bar {
 export function CandlestickChart({ bars, height = 260 }: { bars: Bar[]; height?: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const isFiniteNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
   useEffect(() => {
-    if (!containerRef.current || !bars.length) return;
+    // Illiquid/dual-listed tickers (e.g. BSE-only small caps) can return bars
+    // with null OHLC on days with no trades — lightweight-charts throws a
+    // hard assertion error on any non-number value, so drop those bars.
+    const clean = bars.filter(
+      (b) => isFiniteNumber(b.open) && isFiniteNumber(b.high) && isFiniteNumber(b.low) && isFiniteNumber(b.close)
+    );
+    if (!containerRef.current || !clean.length) return;
 
     const chart = createChart(containerRef.current, {
       height,
@@ -60,26 +68,34 @@ export function CandlestickChart({ bars, height = 260 }: { bars: Bar[]; height?:
       scaleMargins: { top: 0.82, bottom: 0 },
     });
 
-    const sorted = [...bars].sort(
+    const sorted = [...clean].sort(
       (a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime()
     );
 
+    // lightweight-charts also asserts on duplicate/non-ascending timestamps —
+    // collapse same-second bars (last one wins) after flooring to seconds.
+    const byTime = new Map<UTCTimestamp, typeof sorted[number]>();
+    for (const b of sorted) {
+      byTime.set(Math.floor(new Date(b.ts).getTime() / 1000) as UTCTimestamp, b);
+    }
+    const times = [...byTime.keys()].sort((a, b) => a - b);
+
     candleSeries.setData(
-      sorted.map((b) => ({
-        time: Math.floor(new Date(b.ts).getTime() / 1000) as UTCTimestamp,
-        open: b.open,
-        high: b.high,
-        low: b.low,
-        close: b.close,
-      }))
+      times.map((time) => {
+        const b = byTime.get(time)!;
+        return { time, open: b.open, high: b.high, low: b.low, close: b.close };
+      })
     );
 
     volumeSeries.setData(
-      sorted.map((b) => ({
-        time: Math.floor(new Date(b.ts).getTime() / 1000) as UTCTimestamp,
-        value: b.volume ?? 0,
-        color: b.close >= b.open ? "rgba(34, 197, 94, 0.4)" : "rgba(239, 68, 68, 0.4)",
-      }))
+      times.map((time) => {
+        const b = byTime.get(time)!;
+        return {
+          time,
+          value: b.volume ?? 0,
+          color: b.close >= b.open ? "rgba(34, 197, 94, 0.4)" : "rgba(239, 68, 68, 0.4)",
+        };
+      })
     );
 
     chart.timeScale().fitContent();
